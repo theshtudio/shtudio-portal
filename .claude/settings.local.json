@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx create-next-app@14 . --typescript --eslint --app --src-dir --no-tailwind --import-alias \"@/*\" --use-npm)",
+      "Read(//c/Users/vlass/Documents/**)",
+      "Bash(npx create-next-app@14 shtudio-portal-temp --typescript --eslint --app --src-dir --no-tailwind --import-alias \"@/*\" --use-npm)",
+      "Bash(cp /c/Users/vlass/Documents/shtudio-portal-temp/.eslintrc.json .)",
+      "Bash(cp /c/Users/vlass/Documents/shtudio-portal-temp/.gitignore .)",
+      "Bash(cp /c/Users/vlass/Documents/shtudio-portal-temp/next-env.d.ts .)",
+      "Bash(cp /c/Users/vlass/Documents/shtudio-portal-temp/next.config.mjs .)",
+      "Bash(cp /c/Users/vlass/Documents/shtudio-portal-temp/package.json .)",
+      "Bash(cp /c/Users/vlass/Documents/shtudio-portal-temp/package-lock.json .)",
+      "Bash(cp /c/Users/vlass/Documents/shtudio-portal-temp/tsconfig.json .)",
+      "Bash(cp -r /c/Users/vlass/Documents/shtudio-portal-temp/src .)",
+      "Bash(rm -rf /c/Users/vlass/Documents/shtudio-portal-temp)",
+      "Bash(npm install)",
+      "Bash(npm install @supabase/ssr @supabase/supabase-js @anthropic-ai/sdk pdf-parse resend date-fns)",
+      "Bash(npm install -D @types/pdf-parse)",
+      "Bash(npx next build)",
+      "Bash(node -e \"const p = require\\(''pdf-parse''\\); console.log\\(typeof p\\)\")",
+      "Bash(rm -rf .next)",
+      "Bash(npm run dev)",
+      "Bash(npm ls next date-fns cookie)",
+      "Bash(npm install next@latest react@latest react-dom@latest eslint-config-next@latest @types/react@latest @types/react-dom@latest)",
+      "Bash(npm install next@latest react@latest react-dom@latest eslint-config-next@latest eslint@latest @types/react@latest @types/react-dom@latest)",
+      "Bash(npm ls next react eslint)",
+      "Bash(npm install eslint@9)",
+      "Bash(npx kill-port 3000)",
+      "Bash(taskkill //f //im node.exe)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(npm ls pdf-parse)",
+      "Bash(node -e \"try { require\\(''pdf-parse''\\); console.log\\(''OK''\\); } catch\\(e\\) { console.log\\(''ERROR:'', e.message\\); }\")"
+    ]
+  }
+}

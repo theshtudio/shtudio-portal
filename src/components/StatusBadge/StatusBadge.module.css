@@ -1,0 +1,65 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.pending {
+  background: var(--color-warning-light);
+  color: #a16207;
+}
+.pending .dot { background: var(--color-warning); }
+
+.processing {
+  background: var(--color-info-light);
+  color: #1d4ed8;
+}
+.processing .dot { background: var(--color-info); }
+
+.completed {
+  background: var(--color-success-light);
+  color: #15803d;
+}
+.completed .dot { background: var(--color-success); }
+
+.failed {
+  background: var(--color-error-light);
+  color: #dc2626;
+}
+.failed .dot { background: var(--color-error); }
+
+.published {
+  background: var(--color-success-light);
+  color: #15803d;
+}
+.published .dot { background: var(--color-success); }
+
+.draft {
+  background: var(--color-dark-50);
+  color: var(--color-dark-500);
+}
+.draft .dot { background: var(--color-dark-300); }
+
+.active {
+  background: var(--color-success-light);
+  color: #15803d;
+}
+.active .dot { background: var(--color-success); }
+
+.inactive {
+  background: var(--color-dark-50);
+  color: var(--color-dark-500);
+}
+.inactive .dot { background: var(--color-dark-300); }
