@@ -1,3 +1,5 @@
+export const maxDuration = 60;
+
 import { createServiceSupabase } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
