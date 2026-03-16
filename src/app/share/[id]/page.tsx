@@ -1,4 +1,5 @@
 import { createServiceSupabase } from '@/lib/supabase/server';
+import { DownloadButton } from './DownloadButton';
 import type { Metadata } from 'next';
 import styles from './page.module.css';
 
@@ -60,9 +61,12 @@ export default async function ShareReportPage({
   }
 
   return (
-    <div
-      className={styles.reportContainer}
-      dangerouslySetInnerHTML={{ __html: report.ai_enhanced_html }}
-    />
+    <>
+      <DownloadButton />
+      <div
+        className={styles.reportContainer}
+        dangerouslySetInnerHTML={{ __html: report.ai_enhanced_html }}
+      />
+    </>
   );
 }

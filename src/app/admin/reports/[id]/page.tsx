@@ -1,10 +1,12 @@
-import { createServerSupabase } from '@/lib/supabase/server';
+import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
 import { StatusBadge } from '@/components/StatusBadge/StatusBadge';
 import { format } from 'date-fns';
 import Link from 'next/link';
 import { ReportActions } from './ReportActions';
 import { ShareLink } from './ShareLink';
 import { CustomInstructions } from './CustomInstructions';
+import { ReportComments } from './ReportComments';
+import type { ReportCommentWithAuthor } from '@/lib/types';
 import styles from './page.module.css';
 
 export default async function ReportDetailPage({
@@ -26,6 +28,16 @@ export default async function ReportDetailPage({
   }
 
   const client = report.clients as any;
+
+  // Fetch comments (using service role to bypass RLS for admin view)
+  const serviceSupabase = createServiceSupabase();
+  const { data: comments } = await serviceSupabase
+    .from('report_comments')
+    .select('*, profiles(full_name, email)')
+    .eq('report_id', id)
+    .order('created_at', { ascending: true });
+
+  const typedComments = (comments || []) as ReportCommentWithAuthor[];
 
   return (
     <>
@@ -135,6 +147,9 @@ export default async function ReportDetailPage({
           </div>
         )}
       </div>
+
+      {/* Internal Comments */}
+      <ReportComments reportId={report.id} initialComments={typedComments} />
     </>
   );
 }

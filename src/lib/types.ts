@@ -75,9 +75,21 @@ export interface AuditLogEntry {
   created_at: string;
 }
 
+export interface ReportComment {
+  id: string;
+  report_id: string;
+  user_id: string;
+  comment: string;
+  created_at: string;
+}
+
 // Joined types for queries
 export interface ReportWithClient extends Report {
   clients: Pick<Client, 'id' | 'name' | 'slug'>;
+}
+
+export interface ReportCommentWithAuthor extends ReportComment {
+  profiles: Pick<Profile, 'full_name' | 'email'>;
 }
 
 export interface ClientWithReportCount extends Client {

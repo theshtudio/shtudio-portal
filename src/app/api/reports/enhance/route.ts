@@ -2,6 +2,7 @@ export const maxDuration = 300;
 
 import { waitUntil } from '@vercel/functions';
 import { createServiceSupabase } from '@/lib/supabase/server';
+import { sendReportCompletedEmail } from '@/lib/email';
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -31,6 +32,19 @@ async function processReport(reportId: string, report: any) {
     // Convert PDF to base64 for Anthropic's native PDF support
     const buffer = Buffer.from(await fileData.arrayBuffer());
     const pdfBase64 = buffer.toString('base64');
+
+    // Fetch previous completed report for month-on-month comparison
+    const { data: previousReport } = await supabase
+      .from('reports')
+      .select('ai_enhanced_html')
+      .eq('client_id', report.client_id)
+      .eq('ai_status', 'completed')
+      .neq('id', reportId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    const previousHtml = previousReport?.ai_enhanced_html || null;
 
     // Build prompt context
     const clientName = (report.clients as any)?.name || 'the client';
@@ -631,7 +645,14 @@ The client logo URL is: ${clientLogoUrl || 'NONE - use text fallback'}
 The report period is: ${periodInfo || 'as indicated in the PDF data'}${report.custom_instructions ? `
 
 ADDITIONAL INSTRUCTIONS FROM THE SHTUDIO TEAM FOR THIS SPECIFIC REPORT:
-${report.custom_instructions}` : ''}`;
+${report.custom_instructions}` : ''}${previousHtml ? `
+
+MONTH-ON-MONTH COMPARISON:
+Below is the HTML of the previous report for this client. Where relevant, compare key metrics month-on-month and highlight improvements or declines. Add a "Month-on-Month Comparison" section showing the change in key metrics as a table (metric name, previous value, current value, change). Use the .m-change.up / .m-change.down pill styles for positive/negative changes.
+
+<previous_report>
+${previousHtml}
+</previous_report>` : ''}`;
 
     // Call Claude API
     const message = await anthropic.messages.create({
@@ -687,6 +708,17 @@ ${report.custom_instructions}` : ''}`;
         html_length: enhancedHtml.length,
       },
     });
+
+    // Send email notification (non-blocking — failure should not break the flow)
+    try {
+      await sendReportCompletedEmail({
+        clientName,
+        reportTitle: report.title,
+        reportId,
+      });
+    } catch (emailError) {
+      console.error('Failed to send report completion email:', emailError);
+    }
   } catch (error: any) {
     console.error('Background report processing error:', error);
 

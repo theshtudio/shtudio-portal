@@ -51,3 +51,39 @@
 .unavailableLink:hover {
   text-decoration: underline;
 }
+
+/* ── Download PDF button ── */
+
+.downloadButton {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: #F26522;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(242, 101, 34, 0.35);
+  transition: background 0.2s, box-shadow 0.2s;
+}
+
+.downloadButton:hover {
+  background: #d9551a;
+  box-shadow: 0 4px 16px rgba(242, 101, 34, 0.45);
+}
+
+/* ── Print styles — hide button + portal chrome ── */
+
+@media print {
+  .downloadButton {
+    display: none !important;
+  }
+}
