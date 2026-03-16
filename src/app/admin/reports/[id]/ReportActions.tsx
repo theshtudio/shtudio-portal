@@ -9,15 +9,18 @@ import styles from './page.module.css';
 
 interface ReportActionsProps {
   report: Report;
+  clientId?: string;
   showRefresh?: boolean;
   showRetry?: boolean;
+  showDelete?: boolean;
 }
 
-export function ReportActions({ report, showRefresh, showRetry }: ReportActionsProps) {
+export function ReportActions({ report, clientId, showRefresh, showRetry, showDelete }: ReportActionsProps) {
   const router = useRouter();
   const supabase = createClient();
   const [toggling, setToggling] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   async function togglePublish() {
     setToggling(true);
@@ -68,6 +71,35 @@ export function ReportActions({ report, showRefresh, showRetry }: ReportActionsP
       {showRetry && (
         <Button size="sm" onClick={retryProcessing} loading={retrying}>
           Retry Processing
+        </Button>
+      )}
+
+      {showDelete && (
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={async () => {
+            if (!window.confirm('Are you sure you want to delete this report? This will also remove the uploaded PDF. This action cannot be undone.')) {
+              return;
+            }
+            setDeleting(true);
+            try {
+              const res = await fetch(`/api/reports/${report.id}`, { method: 'DELETE' });
+              if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || 'Failed to delete report');
+              }
+              // Redirect to client page or admin dashboard
+              router.push(clientId ? `/admin/clients/${clientId}` : '/admin');
+              router.refresh();
+            } catch (err: any) {
+              alert(err.message || 'Failed to delete report');
+              setDeleting(false);
+            }
+          }}
+          loading={deleting}
+        >
+          Delete Report
         </Button>
       )}
     </>

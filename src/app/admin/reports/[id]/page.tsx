@@ -38,7 +38,7 @@ export default async function ReportDetailPage({
         </div>
         <div className={styles.headerActions}>
           <StatusBadge status={report.ai_status as any} />
-          <ReportActions report={report} />
+          <ReportActions report={report} clientId={client?.id} showDelete />
         </div>
       </div>
 

@@ -3,7 +3,6 @@ export const maxDuration = 60;
 import { createServiceSupabase } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import { PDFParse } from 'pdf-parse';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -53,47 +52,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to download PDF' }, { status: 500 });
     }
 
-    // Extract text from PDF
+    // Convert PDF to base64 for Anthropic's native PDF support (no pdf-parse needed)
     const buffer = Buffer.from(await fileData.arrayBuffer());
-    let pdfText: string;
+    const pdfBase64 = buffer.toString('base64');
 
-    try {
-      const pdf = new PDFParse({ data: buffer });
-      const result = await pdf.getText();
-      pdfText = result.text;
-      await pdf.destroy();
-    } catch {
-      await supabase
-        .from('reports')
-        .update({ ai_status: 'failed', ai_error: 'Failed to parse PDF content' })
-        .eq('id', reportId);
-      return NextResponse.json({ error: 'Failed to parse PDF' }, { status: 500 });
-    }
-
-    if (!pdfText.trim()) {
-      await supabase
-        .from('reports')
-        .update({ ai_status: 'failed', ai_error: 'PDF appears to be empty or image-only (no extractable text)' })
-        .eq('id', reportId);
-      return NextResponse.json({ error: 'No text extracted from PDF' }, { status: 400 });
-    }
-
-    // Send to Claude for enhancement
+    // Send to Claude with native PDF document support
     const clientName = (report.clients as any)?.name || 'the client';
     const clientLogoUrl = (report.clients as any)?.logo_url || '';
     const periodInfo = report.period_start && report.period_end
       ? ` for the period ${report.period_start} to ${report.period_end}`
       : '';
 
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 16384,
-      messages: [
-        {
-          role: 'user',
-          content: `You are a digital marketing report specialist for Shtudio, a Sydney digital agency.
+    const promptText = `You are a digital marketing report specialist for Shtudio, a Sydney digital agency.
 
-Your task is to produce a complete, self-contained HTML file for ${clientName}${periodInfo} that matches the exact design standard of the reference template below.
+Your task is to produce a complete, self-contained HTML file for ${clientName}${periodInfo} that matches the exact design standard of the reference template below. The attached PDF document contains all the raw data and metrics you need — extract everything from it.
 
 Here is your design template:
 
@@ -128,7 +100,7 @@ Here is your design template:
     line-height: 1.6;
   }
 
-  /* ── HEADER ── */
+  /* -- HEADER -- */
   .header {
     background: var(--light-bg);
     color: var(--charcoal);
@@ -196,14 +168,14 @@ Here is your design template:
     background: linear-gradient(90deg, var(--shtudio-orange) 0%, var(--charcoal) 100%);
   }
 
-  /* ── MAIN ── */
+  /* -- MAIN -- */
   .main {
     max-width: 900px;
     margin: 0 auto;
     padding: 40px 40px 60px;
   }
 
-  /* ── SECTION TITLES ── */
+  /* -- SECTION TITLES -- */
   .section-label {
     font-size: 11px;
     font-weight: 700;
@@ -220,7 +192,7 @@ Here is your design template:
     margin-bottom: 24px;
   }
 
-  /* ── HERO SUMMARY ── */
+  /* -- HERO SUMMARY -- */
   .hero-summary {
     background: var(--brand);
     border-radius: 16px;
@@ -285,7 +257,7 @@ Here is your design template:
     margin-top: 4px;
   }
 
-  /* ── METRICS GRID ── */
+  /* -- METRICS GRID -- */
   .metrics-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -329,7 +301,7 @@ Here is your design template:
   .m-change.down { background: #FEE2E2; color: var(--red); }
   .m-change.good-down { background: #DCFCE7; color: var(--green); }
 
-  /* ── BAR CHART ── */
+  /* -- BAR CHART -- */
   .chart-section {
     background: white;
     border-radius: 12px;
@@ -377,7 +349,7 @@ Here is your design template:
     flex-shrink: 0;
   }
 
-  /* ── FUNNEL ── */
+  /* -- FUNNEL -- */
   .funnel-section {
     background: white;
     border-radius: 12px;
@@ -426,7 +398,7 @@ Here is your design template:
     text-align: center;
   }
 
-  /* ── CAMPAIGNS TABLE ── */
+  /* -- CAMPAIGNS TABLE -- */
   .campaigns-section {
     background: white;
     border-radius: 12px;
@@ -491,7 +463,7 @@ Here is your design template:
   .roas-high { background: #DCFCE7; color: var(--green); }
   .roas-low { background: #FEF9C3; color: #92400E; }
 
-  /* ── TASKS ── */
+  /* -- TASKS -- */
   .tasks-section {
     margin-bottom: 40px;
   }
@@ -532,7 +504,7 @@ Here is your design template:
     font-weight: 500;
   }
 
-  /* ── FOOTER ── */
+  /* -- FOOTER -- */
   footer {
     background: var(--charcoal);
     color: rgba(255,255,255,0.6);
@@ -551,14 +523,14 @@ Here is your design template:
   }
   footer .footer-logo span { color: var(--shtudio-orange); }
 
-  /* ── DIVIDER ── */
+  /* -- DIVIDER -- */
   .section-divider {
     height: 1px;
     background: var(--border);
     margin: 40px 0;
   }
 
-  /* ── ROAS HIGHLIGHT ── */
+  /* -- ROAS HIGHLIGHT -- */
   .roas-highlight {
     background: linear-gradient(135deg, #1A3A5C 0%, #2B6CB8 100%);
     border-radius: 16px;
@@ -615,7 +587,7 @@ Here is your design template:
     <div class="header-right">
       <div class="report-type">Google Ads Report</div>
       <div class="report-title">Monthly Report</div>
-      <div class="period">February 2026 &middot; 01.02.2026 – 28.02.2026</div>
+      <div class="period">February 2026 &middot; 01.02.2026 - 28.02.2026</div>
     </div>
   </div>
   <div class="header-border"></div>
@@ -633,9 +605,7 @@ Here is your design template:
   <div class="hero-summary">
     <p>
       February was a <strong>strong month</strong> for your Google Ads. Your campaigns generated
-      <strong>$28,762 in revenue</strong> from a spend of just $3,012 — meaning for every dollar spent on ads,
-      you earned back roughly <strong>$9.55 in sales</strong>. Traffic, clicks, and purchases were all up
-      compared to last month, and your cost per sale actually went down slightly.
+      <strong>$28,762 in revenue</strong> from a spend of just $3,012.
     </p>
     <div class="hero-kpis">
       <div class="hero-kpi">
@@ -656,244 +626,20 @@ Here is your design template:
     </div>
   </div>
 
-  <!-- ROAS CALLOUT -->
-  <div class="roas-highlight">
-    <div>
-      <div class="rh-label">Return on Ad Spend (ROAS)</div>
-      <div class="rh-value">9.55\u00d7</div>
-    </div>
-    <div class="rh-desc">
-      For every <strong>$1</strong> spent on Google Ads in February, Kennedy's Pharmacy generated
-      <strong>$9.55 in revenue</strong>. A healthy benchmark for e-commerce is 4\u00d7, so your campaigns
-      are performing well above average.
-    </div>
-  </div>
-
-  <!-- METRICS -->
-  <div class="section-label">Performance metrics</div>
-  <div class="section-title">Key numbers this month</div>
-
-  <div class="metrics-grid">
-    <div class="metric-card">
-      <div class="m-label">Impressions</div>
-      <div class="m-value">314,559</div>
-      <span class="m-change up">\u25b2 +4.96%</span>
-    </div>
-    <div class="metric-card">
-      <div class="m-label">Clicks</div>
-      <div class="m-value">5,029</div>
-      <span class="m-change up">\u25b2 +4.99%</span>
-    </div>
-    <div class="metric-card">
-      <div class="m-label">Click-Through Rate</div>
-      <div class="m-value">1.60%</div>
-      <span class="m-change up">\u25b2 +0.03%</span>
-    </div>
-    <div class="metric-card">
-      <div class="m-label">Cost Per Click</div>
-      <div class="m-value">$0.60</div>
-      <span class="m-change up">\u25b2 +4.98%</span>
-    </div>
-    <div class="metric-card">
-      <div class="m-label">Total Conversions</div>
-      <div class="m-value">336</div>
-      <span class="m-change up">\u25b2 +10.55%</span>
-    </div>
-    <div class="metric-card">
-      <div class="m-label">Cost Per Sale</div>
-      <div class="m-value">$8.96</div>
-      <span class="m-change good-down">\u25bc \u20130.31%</span>
-    </div>
-    <div class="metric-card">
-      <div class="m-label">Conversion Rate</div>
-      <div class="m-value">6.52%</div>
-      <span class="m-change up">\u25b2 +3.12%</span>
-    </div>
-    <div class="metric-card">
-      <div class="m-label">Total Ad Spend</div>
-      <div class="m-value">$3,012</div>
-      <span class="m-change up">\u25b2 +10.22%</span>
-    </div>
-  </div>
-
-  <!-- SHOPPING FUNNEL -->
-  <div class="funnel-section">
-    <h3>Your customer shopping journey</h3>
-    <p class="chart-sub">How shoppers moved from ad click to purchase this month</p>
-    <div class="funnel">
-      <div class="funnel-step" style="background: var(--brand); width: 100%;">
-        <div class="f-icon">\ud83d\udc41</div>
-        <div class="f-text">
-          <div class="f-name">Saw your ad</div>
-          <div class="f-count">314,559 impressions</div>
-        </div>
-      </div>
-      <div class="funnel-arrow">\u2193</div>
-      <div class="funnel-step" style="background: #2563EB; width: 88%;">
-        <div class="f-icon">\ud83d\uddb1</div>
-        <div class="f-text">
-          <div class="f-name">Clicked through to site</div>
-          <div class="f-count">5,029 clicks</div>
-        </div>
-        <div class="f-rate">1.60% CTR</div>
-      </div>
-      <div class="funnel-arrow">\u2193</div>
-      <div class="funnel-step" style="background: #1D4ED8; width: 72%;">
-        <div class="f-icon">\ud83d\uded2</div>
-        <div class="f-text">
-          <div class="f-name">Added to cart</div>
-          <div class="f-count">1,470 shoppers</div>
-        </div>
-        <div class="f-rate">29.2% of clicks</div>
-      </div>
-      <div class="funnel-arrow">\u2193</div>
-      <div class="funnel-step" style="background: #1E40AF; width: 55%;">
-        <div class="f-icon">\ud83d\udcb3</div>
-        <div class="f-text">
-          <div class="f-name">Reached checkout</div>
-          <div class="f-count">1,522 shoppers</div>
-        </div>
-        <div class="f-rate">30.3% of clicks</div>
-      </div>
-      <div class="funnel-arrow">\u2193</div>
-      <div class="funnel-step" style="background: var(--green); width: 40%;">
-        <div class="f-icon">\u2705</div>
-        <div class="f-text">
-          <div class="f-name">Completed purchase</div>
-          <div class="f-count">297 sales</div>
-        </div>
-        <div class="f-rate">5.9% of clicks</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- CAMPAIGNS -->
-  <div class="section-label">Campaigns</div>
-  <div class="section-title">Top performing campaigns</div>
-
-  <div class="campaigns-section">
-    <div class="table-header">
-      <h3>Campaign breakdown — February 2026</h3>
-      <p>Performance data for your two active campaigns</p>
-    </div>
-    <table>
-      <thead>
-        <tr>
-          <th>Campaign</th>
-          <th>Clicks</th>
-          <th>Spend</th>
-          <th>Revenue</th>
-          <th>Conversions</th>
-          <th>ROAS</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>
-            <div class="campaign-name">
-              Sales – PMax SmartShop
-              <span class="campaign-badge badge-top">Top</span>
-            </div>
-            <div style="font-size:11px;color:var(--mid);margin-top:2px;">Performance Max \u00b7 All products</div>
-          </td>
-          <td>4,410</td>
-          <td>$2,410.77</td>
-          <td>$27,514.06</td>
-          <td>319.56</td>
-          <td><span class="roas-pill roas-high">11.41\u00d7</span></td>
-        </tr>
-        <tr>
-          <td>
-            <div class="campaign-name">Sales – Performance Max \u00b7 Homeopathy</div>
-            <div style="font-size:11px;color:var(--mid);margin-top:2px;">Performance Max \u00b7 Homeopathy range \u00b7 AU\u2013Sydney</div>
-          </td>
-          <td>619</td>
-          <td>$601.20</td>
-          <td>$1,248.14</td>
-          <td>16.50</td>
-          <td><span class="roas-pill roas-low">2.08\u00d7</span></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <!-- MONTHLY SPEND BAR -->
-  <div class="chart-section">
-    <h3>How your budget was allocated</h3>
-    <p class="chart-sub">Spend distribution across campaigns</p>
-    <div class="bar-chart">
-      <div class="bar-row">
-        <div class="bar-label">SmartShop</div>
-        <div class="bar-track">
-          <div class="bar-fill" style="width: 80%; background: var(--brand);"></div>
-        </div>
-        <div class="bar-value">$2,410.77</div>
-      </div>
-      <div class="bar-row">
-        <div class="bar-label">Homeopathy</div>
-        <div class="bar-track">
-          <div class="bar-fill" style="width: 20%; background: var(--brand-light);"></div>
-        </div>
-        <div class="bar-value">$601.20</div>
-      </div>
-    </div>
-    <div style="margin-top:14px; font-size:12px; color:var(--mid);">
-      The SmartShop campaign drives the majority of revenue and is performing at 11.41\u00d7 ROAS — well above the homeopathy campaign which may benefit from review.
-    </div>
-  </div>
-
-  <!-- TASKS COMPLETED -->
-  <div class="tasks-section">
-    <div class="section-label">Work completed</div>
-    <div class="section-title">What we did this month</div>
-    <div class="tasks-grid">
-      <div class="task-card">
-        <div class="task-num">1</div>
-        <div class="task-text">Set up and optimised your product feed for Google Shopping</div>
-      </div>
-      <div class="task-card">
-        <div class="task-num">2</div>
-        <div class="task-text">Launched Performance Max campaigns for broader reach</div>
-      </div>
-      <div class="task-card">
-        <div class="task-num">3</div>
-        <div class="task-text">Monitored search terms and blocked irrelevant traffic with negative keywords</div>
-      </div>
-      <div class="task-card">
-        <div class="task-num">4</div>
-        <div class="task-text">Maintained ads in efficient positions to keep costs low</div>
-      </div>
-      <div class="task-card">
-        <div class="task-num">5</div>
-        <div class="task-text">Reviewed and updated ad creative assets and copy</div>
-      </div>
-      <div class="task-card">
-        <div class="task-num">6</div>
-        <div class="task-text">Corrected conversion tracking settings for accurate reporting</div>
-      </div>
-      <div class="task-card">
-        <div class="task-num">7</div>
-        <div class="task-text">Adjusted bids and budgets to improve performance</div>
-      </div>
-      <div class="task-card">
-        <div class="task-num">8</div>
-        <div class="task-text">Prepared this monthly performance report</div>
-      </div>
-    </div>
-  </div>
+  <!-- (Continue with all other sections using the same design patterns) -->
 
 </div>
 
 <!-- FOOTER -->
 <footer>
   <div class="footer-logo">SH<span>T</span>UDIO</div>
-  <div>Prepared by <a href="https://www.shtudio.com.au">www.shtudio.com.au</a> &nbsp;\u00b7&nbsp; \u00a9 Shtudio 2026</div>
+  <div>Prepared by <a href="https://www.shtudio.com.au">www.shtudio.com.au</a></div>
 </footer>
 
 </body>
 </html>
 
-Use this as your design template. Preserve all CSS exactly. Replace the content, data, client name, brand colours, and metrics with the data extracted from the PDF. Output only raw HTML with no markdown, no code fences, nothing else.
+Use this as your design template. Preserve all CSS exactly. Replace the content, data, client name, brand colours, and metrics with the data extracted from the attached PDF document. Output only raw HTML with no markdown, no code fences, nothing else.
 
 BRAND COLOUR INSTRUCTIONS:
 - The template uses --brand and --brand-light CSS variables (default #2B6CB8 / #4A90D9). Change these to match the client's brand colours if you can infer them from context, otherwise keep the defaults.
@@ -901,16 +647,34 @@ BRAND COLOUR INSTRUCTIONS:
 
 HEADER INSTRUCTIONS:
 - The header uses a light background (#F7F9FC), NOT dark.
-- Left side: client logo area. ${clientLogoUrl ? `The client has a logo — render it as: <img src="${clientLogoUrl}" alt="${clientName}" style="max-height:60px;max-width:200px;object-fit:contain;">` : `No logo URL is available — render the client name "${clientName}" as styled text using the .header-logo-text class (Anton font, charcoal, uppercase).`}
+- Left side: client logo area. ${clientLogoUrl ? `The client has a logo - render it as: <img src="${clientLogoUrl}" alt="${clientName}" style="max-height:60px;max-width:200px;object-fit:contain;">` : `No logo URL is available - render the client name "${clientName}" as styled text using the .header-logo-text class (Anton font, charcoal, uppercase).`}
 - Right side: report type label (e.g. "Google Ads Report"), report title, and period date range.
 - Below the header-inner: a 1px border line (.header-border) then a 4px gradient accent bar from #F26522 (orange) to #2D2D2D (charcoal).
 
 The client name is: ${clientName}
-The client logo URL is: ${clientLogoUrl || 'NONE — use text fallback'}
-The report period is: ${periodInfo || 'as indicated in the PDF data'}
+The client logo URL is: ${clientLogoUrl || 'NONE - use text fallback'}
+The report period is: ${periodInfo || 'as indicated in the PDF data'}`;
 
-Raw PDF content:
-${pdfText}`,
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 16384,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'document',
+              source: {
+                type: 'base64',
+                media_type: 'application/pdf',
+                data: pdfBase64,
+              },
+            } as any,
+            {
+              type: 'text',
+              text: promptText,
+            },
+          ],
         },
       ],
     });
@@ -940,7 +704,7 @@ ${pdfText}`,
       resource_id: reportId,
       metadata: {
         client_id: report.client_id,
-        pdf_text_length: pdfText.length,
+        pdf_size_bytes: buffer.length,
         html_length: enhancedHtml.length,
       },
     });
