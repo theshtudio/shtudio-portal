@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/Button/Button';
@@ -21,6 +21,17 @@ export function ReportActions({ report, clientId, showRefresh, showRetry, showDe
   const [toggling, setToggling] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Auto-poll every 5 seconds while in processing state (showRefresh = true)
+  useEffect(() => {
+    if (!showRefresh) return;
+
+    const interval = setInterval(() => {
+      router.refresh();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [showRefresh, router]);
 
   async function togglePublish() {
     setToggling(true);

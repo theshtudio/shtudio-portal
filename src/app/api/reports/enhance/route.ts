@@ -1,5 +1,6 @@
-export const maxDuration = 60;
+export const maxDuration = 300;
 
+import { waitUntil } from '@vercel/functions';
 import { createServiceSupabase } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
@@ -8,37 +9,12 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
 });
 
-export async function POST(request: Request) {
+// ── Background processing function ──
+// This runs after the HTTP response has been sent, via waitUntil.
+async function processReport(reportId: string, report: any) {
+  const supabase = createServiceSupabase();
+
   try {
-    const { reportId } = await request.json();
-
-    if (!reportId) {
-      return NextResponse.json({ error: 'Missing reportId' }, { status: 400 });
-    }
-
-    const supabase = createServiceSupabase();
-
-    // Get the report
-    const { data: report, error: fetchError } = await supabase
-      .from('reports')
-      .select('*, clients(name, logo_url)')
-      .eq('id', reportId)
-      .single();
-
-    if (fetchError || !report) {
-      return NextResponse.json({ error: 'Report not found' }, { status: 404 });
-    }
-
-    if (!report.pdf_storage_path) {
-      return NextResponse.json({ error: 'No PDF attached to this report' }, { status: 400 });
-    }
-
-    // Update status to processing
-    await supabase
-      .from('reports')
-      .update({ ai_status: 'processing', ai_error: null })
-      .eq('id', reportId);
-
     // Download PDF from Supabase Storage
     const { data: fileData, error: downloadError } = await supabase.storage
       .from('report-pdfs')
@@ -49,14 +25,14 @@ export async function POST(request: Request) {
         .from('reports')
         .update({ ai_status: 'failed', ai_error: 'Failed to download PDF from storage' })
         .eq('id', reportId);
-      return NextResponse.json({ error: 'Failed to download PDF' }, { status: 500 });
+      return;
     }
 
-    // Convert PDF to base64 for Anthropic's native PDF support (no pdf-parse needed)
+    // Convert PDF to base64 for Anthropic's native PDF support
     const buffer = Buffer.from(await fileData.arrayBuffer());
     const pdfBase64 = buffer.toString('base64');
 
-    // Send to Claude with native PDF document support
+    // Build prompt context
     const clientName = (report.clients as any)?.name || 'the client';
     const clientLogoUrl = (report.clients as any)?.logo_url || '';
     const periodInfo = report.period_start && report.period_end
@@ -655,6 +631,7 @@ The client name is: ${clientName}
 The client logo URL is: ${clientLogoUrl || 'NONE - use text fallback'}
 The report period is: ${periodInfo || 'as indicated in the PDF data'}`;
 
+    // Call Claude API
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 16384,
@@ -687,7 +664,7 @@ The report period is: ${periodInfo || 'as indicated in the PDF data'}`;
       })
       .join('');
 
-    // Save enhanced HTML
+    // Save enhanced HTML and mark as completed
     await supabase
       .from('reports')
       .update({
@@ -708,28 +685,66 @@ The report period is: ${periodInfo || 'as indicated in the PDF data'}`;
         html_length: enhancedHtml.length,
       },
     });
-
-    return NextResponse.json({ success: true, reportId });
   } catch (error: any) {
-    console.error('Report enhancement error:', error);
+    console.error('Background report processing error:', error);
 
-    // Try to update the report status
+    // Mark report as failed
     try {
-      const { reportId } = await request.clone().json();
-      if (reportId) {
-        const supabase = createServiceSupabase();
-        await supabase
-          .from('reports')
-          .update({
-            ai_status: 'failed',
-            ai_error: error.message || 'An unexpected error occurred',
-          })
-          .eq('id', reportId);
-      }
+      const supabase = createServiceSupabase();
+      await supabase
+        .from('reports')
+        .update({
+          ai_status: 'failed',
+          ai_error: error.message || 'An unexpected error occurred during processing',
+        })
+        .eq('id', reportId);
     } catch {
       // Ignore cleanup errors
     }
+  }
+}
 
+// ── HTTP handler ──
+// Validates the request, sets status to "processing", returns 200 immediately,
+// then runs the actual Claude API call in the background via waitUntil.
+export async function POST(request: Request) {
+  try {
+    const { reportId } = await request.json();
+
+    if (!reportId) {
+      return NextResponse.json({ error: 'Missing reportId' }, { status: 400 });
+    }
+
+    const supabase = createServiceSupabase();
+
+    // Validate report exists and has a PDF
+    const { data: report, error: fetchError } = await supabase
+      .from('reports')
+      .select('*, clients(name, logo_url)')
+      .eq('id', reportId)
+      .single();
+
+    if (fetchError || !report) {
+      return NextResponse.json({ error: 'Report not found' }, { status: 404 });
+    }
+
+    if (!report.pdf_storage_path) {
+      return NextResponse.json({ error: 'No PDF attached to this report' }, { status: 400 });
+    }
+
+    // Set status to processing immediately
+    await supabase
+      .from('reports')
+      .update({ ai_status: 'processing', ai_error: null })
+      .eq('id', reportId);
+
+    // Run the heavy processing in the background after the response is sent
+    waitUntil(processReport(reportId, report));
+
+    // Return immediately — the client will poll for status updates
+    return NextResponse.json({ success: true, reportId, status: 'processing' });
+  } catch (error: any) {
+    console.error('Report enhancement error:', error);
     return NextResponse.json(
       { error: error.message || 'Enhancement failed' },
       { status: 500 }
