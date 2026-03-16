@@ -154,7 +154,7 @@ Here is your design template:
   /* -- SECTION TITLES -- */
   .section-label {
     font-size: 11px;
-    font-weight: 700;
+    font-weight: 600;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--shtudio-orange);
@@ -201,7 +201,7 @@ Here is your design template:
     line-height: 1.7;
     margin-bottom: 28px;
   }
-  .hero-summary p strong { opacity: 1; font-weight: 700; }
+  .hero-summary p strong { opacity: 1; font-weight: 600; }
   .hero-kpis {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -223,7 +223,7 @@ Here is your design template:
   }
   .hero-kpi .kpi-value {
     font-size: 28px;
-    font-weight: 700;
+    font-weight: 600;
     letter-spacing: -0.5px;
     line-height: 1;
   }
@@ -258,7 +258,7 @@ Here is your design template:
   }
   .metric-card .m-value {
     font-size: 22px;
-    font-weight: 700;
+    font-weight: 600;
     color: var(--charcoal);
     letter-spacing: -0.3px;
     line-height: 1;
@@ -360,7 +360,7 @@ Here is your design template:
   .funnel-step .f-icon { font-size: 18px; }
   .funnel-step .f-text { flex: 1; }
   .funnel-step .f-name { font-size: 13px; opacity: 0.85; font-weight: 500; }
-  .funnel-step .f-count { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+  .funnel-step .f-count { font-size: 22px; font-weight: 600; letter-spacing: -0.3px; }
   .funnel-step .f-rate {
     font-size: 12px;
     opacity: 0.75;
@@ -400,7 +400,7 @@ Here is your design template:
   thead th {
     background: var(--light-bg);
     font-size: 11px;
-    font-weight: 700;
+    font-weight: 600;
     color: var(--mid);
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -420,7 +420,7 @@ Here is your design template:
   .campaign-badge {
     display: inline-block;
     font-size: 10px;
-    font-weight: 700;
+    font-weight: 600;
     padding: 2px 7px;
     border-radius: 4px;
     text-transform: uppercase;
@@ -433,7 +433,7 @@ Here is your design template:
     display: inline-block;
     padding: 3px 10px;
     border-radius: 20px;
-    font-weight: 700;
+    font-weight: 600;
     font-size: 12px;
   }
   .roas-high { background: #DCFCE7; color: var(--green); }
@@ -469,7 +469,7 @@ Here is your design template:
     align-items: center;
     justify-content: center;
     font-size: 12px;
-    font-weight: 700;
+    font-weight: 600;
     flex-shrink: 0;
     margin-top: 1px;
   }
