@@ -1,6 +1,7 @@
 import { createServerSupabase } from '@/lib/supabase/server';
 import { StatusBadge } from '@/components/StatusBadge/StatusBadge';
 import { Button } from '@/components/Button/Button';
+import { ClientLogoUpload } from './ClientLogoUpload';
 import { format } from 'date-fns';
 import Link from 'next/link';
 import styles from './page.module.css';
@@ -36,7 +37,10 @@ export default async function ClientDetailPage({
       </Link>
 
       <div className={styles.header}>
-        <h1 className={styles.heading}>{client.name}</h1>
+        <div className={styles.headerLeft}>
+          <ClientLogoUpload clientId={client.id} currentLogoUrl={client.logo_url} />
+          <h1 className={styles.heading}>{client.name}</h1>
+        </div>
         <div className={styles.headerActions}>
           <StatusBadge status={client.is_active ? 'active' : 'inactive'} />
         </div>
