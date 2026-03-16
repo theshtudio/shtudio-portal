@@ -3,6 +3,8 @@ import { StatusBadge } from '@/components/StatusBadge/StatusBadge';
 import { format } from 'date-fns';
 import Link from 'next/link';
 import { ReportActions } from './ReportActions';
+import { ShareLink } from './ShareLink';
+import { CustomInstructions } from './CustomInstructions';
 import styles from './page.module.css';
 
 export default async function ReportDetailPage({
@@ -28,7 +30,7 @@ export default async function ReportDetailPage({
   return (
     <>
       <Link href={client ? `/admin/clients/${client.id}` : '/admin'} className={styles.backLink}>
-        ← Back to {client?.name || 'Dashboard'}
+        &larr; Back to {client?.name || 'Dashboard'}
       </Link>
 
       <div className={styles.header}>
@@ -41,6 +43,30 @@ export default async function ReportDetailPage({
           <ReportActions report={report} clientId={client?.id} showDelete />
         </div>
       </div>
+
+      {/* Publish + Share section */}
+      {report.ai_status === 'completed' && (
+        <div className={styles.publishSection}>
+          <div className={styles.publishCard}>
+            <div className={styles.publishHeader}>
+              <div>
+                <div className={styles.publishTitle}>Publish & Share</div>
+                <div className={styles.publishDescription}>
+                  {report.is_published
+                    ? 'This report is live and accessible via the share link.'
+                    : 'Publish this report to make it accessible via the share link.'}
+                </div>
+              </div>
+              <ReportActions report={report} />
+            </div>
+            {report.is_published && (
+              <div className={styles.shareRow}>
+                <ShareLink reportId={report.id} />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className={styles.metaGrid}>
         <div className={styles.metaCard}>
@@ -59,7 +85,7 @@ export default async function ReportDetailPage({
           <div className={styles.metaCard}>
             <div className={styles.metaLabel}>Report Period</div>
             <div className={styles.metaValue}>
-              {format(new Date(report.period_start), 'MMM yyyy')} — {format(new Date(report.period_end), 'MMM yyyy')}
+              {format(new Date(report.period_start), 'MMM yyyy')} &mdash; {format(new Date(report.period_end), 'MMM yyyy')}
             </div>
           </div>
         )}
@@ -71,6 +97,9 @@ export default async function ReportDetailPage({
         </div>
       </div>
 
+      {/* Custom Instructions */}
+      <CustomInstructions reportId={report.id} initialValue={report.custom_instructions || ''} />
+
       <div className={styles.previewSection}>
         <h2 className={styles.sectionTitle}>Report Preview</h2>
 
@@ -81,7 +110,7 @@ export default async function ReportDetailPage({
           />
         ) : report.ai_status === 'processing' ? (
           <div className={styles.processingState}>
-            <div className={styles.processingIcon}>⏳</div>
+            <div className={styles.processingIcon}>&#9203;</div>
             <div className={styles.processingText}>
               AI is processing this report. This usually takes 30-60 seconds.
             </div>
@@ -98,7 +127,7 @@ export default async function ReportDetailPage({
           </div>
         ) : (
           <div className={styles.processingState}>
-            <div className={styles.processingIcon}>📄</div>
+            <div className={styles.processingIcon}>&#128196;</div>
             <div className={styles.processingText}>
               Report is pending AI processing.
             </div>

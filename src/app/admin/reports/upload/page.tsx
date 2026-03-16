@@ -88,6 +88,7 @@ export default function UploadReportPage() {
   const [title, setTitle] = useState('');
   const [periodStart, setPeriodStart] = useState('');
   const [periodEnd, setPeriodEnd] = useState('');
+  const [customInstructions, setCustomInstructions] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -263,6 +264,7 @@ export default function UploadReportPage() {
           period_start: periodStart || null,
           period_end: periodEnd || null,
           pdf_storage_path: filePath,
+          custom_instructions: customInstructions || null,
         }),
       });
 
@@ -411,6 +413,17 @@ export default function UploadReportPage() {
             value={periodEnd}
             onChange={handlePeriodEndChange}
             hint={autoFilled.periodEnd ? 'auto-filled' : undefined}
+          />
+        </div>
+
+        <div className={styles.field}>
+          <label className={styles.label}>Custom Instructions for AI (optional)</label>
+          <textarea
+            className={styles.textarea}
+            value={customInstructions}
+            onChange={(e) => setCustomInstructions(e.target.value)}
+            placeholder="e.g. Emphasise ROAS performance, suggest budget increases for top campaigns, keep language simple for non-technical clients..."
+            rows={3}
           />
         </div>
 

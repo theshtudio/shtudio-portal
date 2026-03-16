@@ -44,6 +44,7 @@ export interface Report {
   ai_enhanced_html: string | null;
   ai_status: ReportAiStatus;
   ai_error: string | null;
+  custom_instructions: string | null;
   is_published: boolean;
   published_at: string | null;
   created_by: string | null;

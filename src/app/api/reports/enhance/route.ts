@@ -490,14 +490,13 @@ Here is your design template:
   }
   footer a { color: var(--shtudio-orange); text-decoration: none; }
   footer .footer-logo {
-    font-family: 'DM Sans', sans-serif;
-    font-weight: 800;
-    font-size: 16px;
-    color: white;
-    letter-spacing: -0.3px;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
   }
-  footer .footer-logo span { color: var(--shtudio-orange); }
+  footer .footer-logo img {
+    height: 28px;
+    width: auto;
+    display: inline-block;
+  }
 
   /* -- DIVIDER -- */
   .section-divider {
@@ -608,7 +607,7 @@ Here is your design template:
 
 <!-- FOOTER -->
 <footer>
-  <div class="footer-logo">SH<span>T</span>UDIO</div>
+  <div class="footer-logo"><img src="https://shtudio-portal.vercel.app/logo-white.png" alt="Shtudio"></div>
   <div>Prepared by <a href="https://www.shtudio.com.au">www.shtudio.com.au</a></div>
 </footer>
 
@@ -629,7 +628,10 @@ HEADER INSTRUCTIONS:
 
 The client name is: ${clientName}
 The client logo URL is: ${clientLogoUrl || 'NONE - use text fallback'}
-The report period is: ${periodInfo || 'as indicated in the PDF data'}`;
+The report period is: ${periodInfo || 'as indicated in the PDF data'}${report.custom_instructions ? `
+
+ADDITIONAL INSTRUCTIONS FROM THE SHTUDIO TEAM FOR THIS SPECIFIC REPORT:
+${report.custom_instructions}` : ''}`;
 
     // Call Claude API
     const message = await anthropic.messages.create({

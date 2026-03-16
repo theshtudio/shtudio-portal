@@ -1,0 +1,53 @@
+.reportContainer {
+  min-height: 100vh;
+}
+
+.unavailable {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #F7F9FC;
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  padding: 20px;
+}
+
+.unavailableCard {
+  text-align: center;
+  max-width: 440px;
+  background: white;
+  border-radius: 16px;
+  padding: 48px 40px;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+}
+
+.unavailableIcon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.unavailableTitle {
+  font-size: 22px;
+  font-weight: 700;
+  color: #2D2D2D;
+  margin-bottom: 12px;
+}
+
+.unavailableText {
+  font-size: 14px;
+  color: #6B7280;
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+.unavailableLink {
+  font-size: 13px;
+  color: #F26522;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.unavailableLink:hover {
+  text-decoration: underline;
+}
