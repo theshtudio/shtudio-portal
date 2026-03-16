@@ -102,6 +102,7 @@ export default async function ReportDetailPage({
             <div className={styles.processingText}>
               Report is pending AI processing.
             </div>
+            <ReportActions report={report} showRetry />
           </div>
         )}
       </div>
