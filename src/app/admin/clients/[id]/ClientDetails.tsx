@@ -94,7 +94,17 @@ export function ClientDetails({ client }: ClientDetailsProps) {
     <>
       <div className={styles.header}>
         <div className={styles.headerLeft}>
-          <ClientLogoUpload clientId={client.id} currentLogoUrl={client.logo_url} />
+          {editing ? (
+            <ClientLogoUpload clientId={client.id} currentLogoUrl={client.logo_url} />
+          ) : (
+            <div className={styles.logoPreview}>
+              {client.logo_url ? (
+                <img src={client.logo_url} alt="Client logo" className={styles.logoImage} />
+              ) : (
+                <div className={styles.logoPlaceholder}>No logo</div>
+              )}
+            </div>
+          )}
           {editing ? (
             <input
               className={styles.editInput}
