@@ -34,11 +34,42 @@
   text-decoration: none;
 }
 
+.clientHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.clientLogo {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  object-fit: contain;
+  border: 1px solid var(--color-border);
+  background: var(--color-white);
+  flex-shrink: 0;
+}
+
+.clientLogoPlaceholder {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--color-dark-100);
+  color: var(--color-dark-400);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
 .clientName {
   font-family: var(--font-body);
   font-size: var(--text-lg);
   font-weight: 600;
-  margin-bottom: var(--space-2);
+  margin-bottom: 0;
   text-transform: none;
 }
 

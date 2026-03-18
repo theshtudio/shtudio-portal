@@ -29,7 +29,25 @@ export default async function ClientsPage() {
               href={`/admin/clients/${client.id}`}
               className={styles.clientCard}
             >
-              <h3 className={styles.clientName}>{client.name}</h3>
+              <div className={styles.clientHeader}>
+                {client.logo_url ? (
+                  <img
+                    src={client.logo_url}
+                    alt={`${client.name} logo`}
+                    className={styles.clientLogo}
+                  />
+                ) : (
+                  <div className={styles.clientLogoPlaceholder}>
+                    {client.name
+                      .split(/\s+/)
+                      .slice(0, 2)
+                      .map((w: string) => w[0])
+                      .join('')
+                      .toUpperCase()}
+                  </div>
+                )}
+                <h3 className={styles.clientName}>{client.name}</h3>
+              </div>
               <div className={styles.clientMeta}>
                 {client.primary_contact_email || 'No contact set'}
               </div>
