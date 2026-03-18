@@ -185,3 +185,64 @@
   color: var(--color-error);
   margin-top: var(--space-1);
 }
+
+/* ── Edit mode ── */
+
+.editInput {
+  font-family: var(--font-heading);
+  font-size: var(--text-3xl);
+  text-transform: uppercase;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-3);
+  background: var(--color-white);
+  width: 100%;
+  max-width: 400px;
+}
+
+.editInput:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb, 0, 0, 0), 0.1);
+}
+
+.editInputSm {
+  font-size: var(--text-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-white);
+  width: 200px;
+  text-align: right;
+}
+
+.editInputSm:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.editActions {
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.successMessage {
+  background: var(--color-success-bg, #ecfdf5);
+  color: var(--color-success, #059669);
+  border: 1px solid var(--color-success-border, #a7f3d0);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-4);
+}
+
+.errorMessage {
+  background: var(--color-error-bg, #fef2f2);
+  color: var(--color-error, #dc2626);
+  border: 1px solid var(--color-error-border, #fecaca);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-4);
+}

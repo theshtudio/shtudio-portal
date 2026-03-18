@@ -1,7 +1,7 @@
 import { createServerSupabase } from '@/lib/supabase/server';
 import { StatusBadge } from '@/components/StatusBadge/StatusBadge';
 import { Button } from '@/components/Button/Button';
-import { ClientLogoUpload } from './ClientLogoUpload';
+import { ClientDetails } from './ClientDetails';
 import { format } from 'date-fns';
 import Link from 'next/link';
 import styles from './page.module.css';
@@ -36,53 +36,7 @@ export default async function ClientDetailPage({
         ← Back to Clients
       </Link>
 
-      <div className={styles.header}>
-        <div className={styles.headerLeft}>
-          <ClientLogoUpload clientId={client.id} currentLogoUrl={client.logo_url} />
-          <h1 className={styles.heading}>{client.name}</h1>
-        </div>
-        <div className={styles.headerActions}>
-          <StatusBadge status={client.is_active ? 'active' : 'inactive'} />
-        </div>
-      </div>
-
-      <div className={styles.grid}>
-        <div className={styles.infoCard}>
-          <h3 className={styles.infoTitle}>Client Details</h3>
-          <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Website</span>
-            <span className={styles.infoValue}>{client.website || '—'}</span>
-          </div>
-          <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Slug</span>
-            <span className={styles.infoValue}>{client.slug}</span>
-          </div>
-          <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Created</span>
-            <span className={styles.infoValue}>
-              {format(new Date(client.created_at), 'dd MMM yyyy')}
-            </span>
-          </div>
-        </div>
-
-        <div className={styles.infoCard}>
-          <h3 className={styles.infoTitle}>Primary Contact</h3>
-          <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Name</span>
-            <span className={styles.infoValue}>{client.primary_contact_name || '—'}</span>
-          </div>
-          <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Email</span>
-            <span className={styles.infoValue}>{client.primary_contact_email || '—'}</span>
-          </div>
-          {client.notes && (
-            <div className={styles.infoRow}>
-              <span className={styles.infoLabel}>Notes</span>
-              <span className={styles.infoValue}>{client.notes}</span>
-            </div>
-          )}
-        </div>
-      </div>
+      <ClientDetails client={client} />
 
       <div className={styles.reportsSection}>
         <div className={styles.sectionHeader}>
