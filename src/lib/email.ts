@@ -1,7 +1,5 @@
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://shtudio-portal.vercel.app';
 
 interface ReportCompletedEmailParams {
@@ -15,6 +13,13 @@ export async function sendReportCompletedEmail({
   reportTitle,
   reportId,
 }: ReportCompletedEmailParams) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.warn('[email] RESEND_API_KEY is not set — skipping email send');
+    return;
+  }
+
+  const resend = new Resend(apiKey);
   const adminUrl = `${BASE_URL}/admin/reports/${reportId}`;
   const shareUrl = `${BASE_URL}/share/${reportId}`;
 
