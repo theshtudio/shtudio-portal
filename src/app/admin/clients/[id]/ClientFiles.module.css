@@ -1,0 +1,155 @@
+.section {
+  margin-top: var(--space-8);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+
+.sectionTitle {
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  text-transform: none;
+}
+
+.description {
+  font-size: var(--text-sm);
+  color: var(--color-dark-400);
+  margin-bottom: var(--space-4);
+}
+
+.error {
+  padding: var(--space-3);
+  background: var(--color-error-light);
+  color: var(--color-error);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-4);
+}
+
+.uploadRow {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  margin-bottom: var(--space-4);
+}
+
+.labelInput {
+  flex: 1;
+  max-width: 300px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-family: var(--font-body);
+  color: var(--color-dark);
+  background: var(--color-white);
+  height: 36px;
+}
+
+.labelInput:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.empty {
+  text-align: center;
+  padding: var(--space-8);
+  color: var(--color-dark-400);
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-sm);
+}
+
+.fileList {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.fileRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-sm);
+}
+
+.fileRow:last-child {
+  border-bottom: none;
+}
+
+.fileIcon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.fileInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fileName {
+  font-weight: 500;
+  color: var(--color-dark);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileOriginal {
+  font-size: var(--text-xs);
+  color: var(--color-dark-300);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileSize {
+  font-size: var(--text-xs);
+  color: var(--color-dark-400);
+  flex-shrink: 0;
+  min-width: 60px;
+  text-align: right;
+}
+
+.fileDate {
+  font-size: var(--text-xs);
+  color: var(--color-dark-400);
+  flex-shrink: 0;
+  min-width: 80px;
+  text-align: right;
+}
+
+.deleteBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-dark-300);
+  font-size: 14px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.deleteBtn:hover {
+  background: var(--color-error-light);
+  color: var(--color-error);
+}
+
+.deleteBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

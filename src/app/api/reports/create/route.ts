@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { client_id, title, period_start, period_end, pdf_storage_path, custom_instructions } = body;
+  const { client_id, title, period_start, period_end, pdf_storage_path, pdf_storage_paths, custom_instructions, client_file_ids } = body;
 
   if (!client_id || !title || !pdf_storage_path) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -38,7 +38,9 @@ export async function POST(request: NextRequest) {
       period_start: period_start || null,
       period_end: period_end || null,
       pdf_storage_path,
+      pdf_storage_paths: pdf_storage_paths || null,
       custom_instructions: custom_instructions || null,
+      client_file_ids: client_file_ids || null,
       ai_status: 'pending',
       created_by: user.id,
     })

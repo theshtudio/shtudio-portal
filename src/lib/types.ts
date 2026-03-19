@@ -17,8 +17,10 @@ export interface Client {
   slug: string;
   logo_url: string | null;
   website: string | null;
+  industry: string | null;
   primary_contact_name: string | null;
   primary_contact_email: string | null;
+  primary_contact_phone: string | null;
   integrations: Record<string, unknown>;
   notes: string | null;
   is_active: boolean;
@@ -41,6 +43,7 @@ export interface Report {
   period_start: string | null;
   period_end: string | null;
   pdf_storage_path: string | null;
+  pdf_storage_paths: string[] | null;
   ai_enhanced_html: string | null;
   ai_status: ReportAiStatus;
   ai_error: string | null;
@@ -80,6 +83,17 @@ export interface ReportComment {
   report_id: string;
   user_id: string;
   comment: string;
+  created_at: string;
+}
+
+export interface ClientFile {
+  id: string;
+  client_id: string;
+  file_name: string;
+  file_label: string | null;
+  file_path: string;
+  file_type: string | null;
+  file_size: number | null;
   created_at: string;
 }
 

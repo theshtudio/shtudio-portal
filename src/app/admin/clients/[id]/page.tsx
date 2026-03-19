@@ -2,6 +2,7 @@ import { createServerSupabase } from '@/lib/supabase/server';
 import { StatusBadge } from '@/components/StatusBadge/StatusBadge';
 import { Button } from '@/components/Button/Button';
 import { ClientDetails } from './ClientDetails';
+import { ClientFiles } from './ClientFiles';
 import { format } from 'date-fns';
 import Link from 'next/link';
 import styles from './page.module.css';
@@ -37,6 +38,8 @@ export default async function ClientDetailPage({
       </Link>
 
       <ClientDetails client={client} />
+
+      <ClientFiles clientId={client.id} />
 
       <div className={styles.reportsSection}>
         <div className={styles.sectionHeader}>

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/Button/Button';
 import { Input } from '@/components/Input/Input';
-import type { Client } from '@/lib/types';
+import type { Client, ClientFile } from '@/lib/types';
 import styles from './page.module.css';
 
 // --- Filename parser ---
@@ -16,8 +16,17 @@ const MONTHS: Record<string, number> = {
   jan: 0, feb: 1, mar: 2, apr: 3, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
 };
 
+const ACCEPTED_EXTENSIONS = '.pdf,.doc,.docx,.xls,.xlsx';
+const ACCEPTED_TYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+];
+
 function parseFilename(filename: string) {
-  const name = filename.replace(/\.pdf$/i, '').trim();
+  const name = filename.replace(/\.(pdf|docx?|xlsx?)$/i, '').trim();
 
   // Find month
   const monthPattern = new RegExp(`\\b(${Object.keys(MONTHS).join('|')})\\b`, 'i');
@@ -32,7 +41,6 @@ function parseFilename(filename: string) {
     year = parseInt(year4Match[1], 10);
     yearRaw = year4Match[1];
   } else {
-    // Look for 2-digit number (20-39) near the month
     const year2Match = name.match(/\b(\d{2})\b/g);
     if (year2Match) {
       for (const candidate of year2Match) {
@@ -48,14 +56,12 @@ function parseFilename(filename: string) {
 
   const month: number | null = monthMatch ? MONTHS[monthMatch[1].toLowerCase()] : null;
 
-  // Build cleaned title — expand 2-digit year to 4-digit
   let title = name;
   if (year && yearRaw && yearRaw.length === 2) {
     title = name.replace(new RegExp(`\\b${yearRaw}\\b`), String(year));
   }
   title = title.replace(/[\s\-–—]+$/, '').replace(/^[\s\-–—]+/, '').trim();
 
-  // Build period dates
   let periodStart: string | null = null;
   let periodEnd: string | null = null;
 
@@ -77,6 +83,12 @@ interface AutoFilled {
   periodEnd: boolean;
 }
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export default function UploadReportPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -89,7 +101,7 @@ export default function UploadReportPage() {
   const [periodStart, setPeriodStart] = useState('');
   const [periodEnd, setPeriodEnd] = useState('');
   const [customInstructions, setCustomInstructions] = useState('');
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -97,9 +109,14 @@ export default function UploadReportPage() {
     title: false, periodStart: false, periodEnd: false,
   });
 
+  // Client files
+  const [clientFiles, setClientFiles] = useState<ClientFile[]>([]);
+  const [selectedClientFileIds, setSelectedClientFileIds] = useState<string[]>([]);
+  const [loadingClientFiles, setLoadingClientFiles] = useState(false);
+
   // --- Progress simulation ---
   const PROGRESS_STAGES = [
-    { label: 'Uploading PDF...', target: 15 },
+    { label: 'Uploading files...', target: 15 },
     { label: 'Extracting report data...', target: 40 },
     { label: 'Claude is analysing your report...', target: 70 },
     { label: 'Generating enhanced HTML report...', target: 90 },
@@ -113,19 +130,14 @@ export default function UploadReportPage() {
     setProgress(0);
     setProgressStage(0);
 
-    // Total simulated time ~45s, tick every 400ms = ~112 ticks
-    // We advance through stages automatically
     let current = 0;
     let stage = 0;
     const tick = () => {
-      // Determine the ceiling for this stage
       const ceiling = PROGRESS_STAGES[stage]?.target ?? 100;
-      // Slow down as we approach each ceiling
       const remaining = ceiling - current;
       const increment = Math.max(0.15, remaining * 0.04);
       current = Math.min(current + increment, ceiling - 0.5);
 
-      // Move to next stage when close enough (within 1%)
       if (current >= ceiling - 1 && stage < PROGRESS_STAGES.length - 1) {
         stage += 1;
         setProgressStage(stage);
@@ -167,28 +179,74 @@ export default function UploadReportPage() {
     loadClients();
   }, [supabase]);
 
-  // Auto-fill from filename when a file is selected
-  const handleFileSelected = useCallback((selected: File) => {
-    setFile(selected);
-
-    const parsed = parseFilename(selected.name);
-    const filled: AutoFilled = { title: false, periodStart: false, periodEnd: false };
-
-    if (parsed.title) {
-      setTitle(parsed.title);
-      filled.title = true;
-    }
-    if (parsed.periodStart) {
-      setPeriodStart(parsed.periodStart);
-      filled.periodStart = true;
-    }
-    if (parsed.periodEnd) {
-      setPeriodEnd(parsed.periodEnd);
-      filled.periodEnd = true;
+  // Fetch client files when client changes
+  useEffect(() => {
+    if (!selectedClient) {
+      setClientFiles([]);
+      setSelectedClientFileIds([]);
+      return;
     }
 
-    setAutoFilled(filled);
-  }, []);
+    async function loadClientFiles() {
+      setLoadingClientFiles(true);
+      try {
+        const res = await fetch(`/api/clients/${selectedClient}/files`);
+        if (res.ok) {
+          const data = await res.json();
+          setClientFiles(data.files || []);
+        }
+      } catch {
+        // Ignore - client files are optional context
+      } finally {
+        setLoadingClientFiles(false);
+      }
+    }
+    loadClientFiles();
+    setSelectedClientFileIds([]);
+  }, [selectedClient]);
+
+  function isAcceptedFile(file: File): boolean {
+    return ACCEPTED_TYPES.includes(file.type);
+  }
+
+  // Auto-fill from first filename when files are selected
+  const handleFilesSelected = useCallback((selected: File[]) => {
+    const valid = selected.filter(isAcceptedFile);
+    if (valid.length === 0) {
+      setError('Only PDF, Word, and Excel files are accepted.');
+      return;
+    }
+    if (valid.length < selected.length) {
+      setError('Some files were skipped (unsupported type). Accepted: PDF, Word, Excel.');
+    }
+
+    setFiles((prev) => [...prev, ...valid]);
+
+    // Auto-fill from first file if no title yet
+    if (!title && valid[0]) {
+      const parsed = parseFilename(valid[0].name);
+      const filled: AutoFilled = { title: false, periodStart: false, periodEnd: false };
+
+      if (parsed.title) {
+        setTitle(parsed.title);
+        filled.title = true;
+      }
+      if (parsed.periodStart) {
+        setPeriodStart(parsed.periodStart);
+        filled.periodStart = true;
+      }
+      if (parsed.periodEnd) {
+        setPeriodEnd(parsed.periodEnd);
+        filled.periodEnd = true;
+      }
+
+      setAutoFilled(filled);
+    }
+  }, [title]);
+
+  function removeFile(index: number) {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  }
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -205,15 +263,10 @@ export default function UploadReportPage() {
     e.stopPropagation();
     setDragActive(false);
 
-    if (e.dataTransfer.files?.[0]) {
-      const dropped = e.dataTransfer.files[0];
-      if (dropped.type === 'application/pdf') {
-        handleFileSelected(dropped);
-      } else {
-        setError('Only PDF files are accepted.');
-      }
+    if (e.dataTransfer.files?.length) {
+      handleFilesSelected(Array.from(e.dataTransfer.files));
     }
-  }, [handleFileSelected]);
+  }, [handleFilesSelected]);
 
   // Clear auto-filled flag when user manually edits a field
   function handleTitleChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -229,10 +282,18 @@ export default function UploadReportPage() {
     if (autoFilled.periodEnd) setAutoFilled(prev => ({ ...prev, periodEnd: false }));
   }
 
+  function toggleClientFile(fileId: string) {
+    setSelectedClientFileIds((prev) =>
+      prev.includes(fileId)
+        ? prev.filter((id) => id !== fileId)
+        : [...prev, fileId],
+    );
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!file || !selectedClient || !title) {
-      setError('Please fill all required fields and upload a PDF.');
+    if (files.length === 0 || !selectedClient || !title) {
+      setError('Please fill all required fields and upload at least one file.');
       return;
     }
 
@@ -241,9 +302,11 @@ export default function UploadReportPage() {
     startProgress();
 
     try {
-      // Upload PDF via server-side route (service role bypasses storage RLS)
+      // Upload files via server-side route
       const formData = new FormData();
-      formData.append('file', file);
+      for (const file of files) {
+        formData.append('files', file);
+      }
       formData.append('clientId', selectedClient);
 
       const uploadRes = await fetch('/api/reports/upload', {
@@ -251,10 +314,10 @@ export default function UploadReportPage() {
         body: formData,
       });
 
-      const { filePath, error: uploadError } = await uploadRes.json();
-      if (!uploadRes.ok) throw new Error(uploadError || 'Failed to upload PDF');
+      const { filePath, filePaths, error: uploadError } = await uploadRes.json();
+      if (!uploadRes.ok) throw new Error(uploadError || 'Failed to upload files');
 
-      // Create report record server-side (service role bypasses RLS)
+      // Create report record server-side
       const res = await fetch('/api/reports/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -264,7 +327,9 @@ export default function UploadReportPage() {
           period_start: periodStart || null,
           period_end: periodEnd || null,
           pdf_storage_path: filePath,
+          pdf_storage_paths: filePaths || null,
           custom_instructions: customInstructions || null,
+          client_file_ids: selectedClientFileIds.length > 0 ? selectedClientFileIds : null,
         }),
       });
 
@@ -327,8 +392,10 @@ export default function UploadReportPage() {
               </div>
             ))}
           </div>
-          {file && (
-            <div className={styles.progressFile}>{file.name}</div>
+          {files.length > 0 && (
+            <div className={styles.progressFile}>
+              {files.map((f) => f.name).join(', ')}
+            </div>
           )}
           <div className={styles.progressActions}>
             <Button type="button" variant="secondary" onClick={handleCancel}>
@@ -348,7 +415,7 @@ export default function UploadReportPage() {
         {error && <div className={styles.error}>{error}</div>}
 
         <div className={styles.field}>
-          <label className={styles.label}>PDF File *</label>
+          <label className={styles.label}>Report Files *</label>
           <div
             className={`${styles.dropzone} ${dragActive ? styles.dropzoneActive : ''}`}
             onDragEnter={handleDrag}
@@ -359,20 +426,47 @@ export default function UploadReportPage() {
           >
             <div className={styles.dropzoneIcon}>📄</div>
             <div className={styles.dropzoneText}>
-              Drag and drop your PDF here, or{' '}
+              Drag and drop your files here, or{' '}
               <span className={styles.dropzoneHighlight}>click to browse</span>
             </div>
-            {file && <div className={styles.fileName}>{file.name}</div>}
+            <div className={styles.dropzoneHint}>PDF, Word, or Excel files</div>
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf"
+              accept={ACCEPTED_EXTENSIONS}
+              multiple
               style={{ display: 'none' }}
               onChange={(e) => {
-                if (e.target.files?.[0]) handleFileSelected(e.target.files[0]);
+                if (e.target.files?.length) {
+                  handleFilesSelected(Array.from(e.target.files));
+                  e.target.value = '';
+                }
               }}
             />
           </div>
+
+          {files.length > 0 && (
+            <div className={styles.fileList}>
+              {files.map((file, i) => (
+                <div key={`${file.name}-${i}`} className={styles.fileItem}>
+                  <span className={styles.fileItemIcon}>
+                    {file.type === 'application/pdf' ? '📕' :
+                     file.type.includes('word') ? '📘' : '📗'}
+                  </span>
+                  <span className={styles.fileItemName}>{file.name}</span>
+                  <span className={styles.fileItemSize}>{formatFileSize(file.size)}</span>
+                  <button
+                    type="button"
+                    className={styles.fileItemRemove}
+                    onClick={(e) => { e.stopPropagation(); removeFile(i); }}
+                    title="Remove file"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className={styles.field}>
@@ -389,6 +483,41 @@ export default function UploadReportPage() {
             ))}
           </select>
         </div>
+
+        {/* Client Files Checklist */}
+        {selectedClient && clientFiles.length > 0 && (
+          <div className={styles.field}>
+            <label className={styles.label}>Include Client Files as Context</label>
+            <p className={styles.fieldHint}>
+              Select files from the client library to include as additional context for Claude.
+            </p>
+            <div className={styles.clientFilesList}>
+              {clientFiles.map((cf) => (
+                <label key={cf.id} className={styles.clientFileCheck}>
+                  <input
+                    type="checkbox"
+                    checked={selectedClientFileIds.includes(cf.id)}
+                    onChange={() => toggleClientFile(cf.id)}
+                  />
+                  <span className={styles.clientFileInfo}>
+                    <span className={styles.clientFileName}>
+                      {cf.file_label || cf.file_name}
+                    </span>
+                    {cf.file_label && cf.file_label !== cf.file_name && (
+                      <span className={styles.clientFileOriginal}>{cf.file_name}</span>
+                    )}
+                    {cf.file_size && (
+                      <span className={styles.clientFileSize}>{formatFileSize(cf.file_size)}</span>
+                    )}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+        {selectedClient && loadingClientFiles && (
+          <div className={styles.fieldHint}>Loading client files...</div>
+        )}
 
         <Input
           label="Report Title *"

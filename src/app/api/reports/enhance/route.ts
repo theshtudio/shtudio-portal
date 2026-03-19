@@ -10,41 +10,110 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
 });
 
+// Map file extensions/types to Anthropic media types
+function getMediaType(path: string, contentType?: string): string {
+  const ext = path.split('.').pop()?.toLowerCase();
+  if (ext === 'pdf' || contentType === 'application/pdf') return 'application/pdf';
+  if (ext === 'docx' || contentType?.includes('wordprocessingml')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  if (ext === 'doc' || contentType === 'application/msword') return 'application/msword';
+  if (ext === 'xlsx' || contentType?.includes('spreadsheetml')) return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  if (ext === 'xls' || contentType === 'application/vnd.ms-excel') return 'application/vnd.ms-excel';
+  if (ext === 'csv') return 'text/csv';
+  return 'application/pdf';
+}
+
+// Download a file from storage and return as a document content block
+async function downloadAsDocBlock(
+  supabase: ReturnType<typeof createServiceSupabase>,
+  bucket: string,
+  path: string,
+): Promise<any | null> {
+  const { data, error } = await supabase.storage.from(bucket).download(path);
+  if (error || !data) {
+    console.error(`Failed to download ${bucket}/${path}:`, error?.message);
+    return null;
+  }
+
+  const buffer = Buffer.from(await data.arrayBuffer());
+  const base64 = buffer.toString('base64');
+  const mediaType = getMediaType(path);
+
+  return {
+    type: 'document',
+    source: {
+      type: 'base64',
+      media_type: mediaType,
+      data: base64,
+    },
+  };
+}
+
 // ── Background processing function ──
-// This runs after the HTTP response has been sent, via waitUntil.
 async function processReport(reportId: string, report: any) {
   const supabase = createServiceSupabase();
 
   try {
-    // Download PDF from Supabase Storage
-    const { data: fileData, error: downloadError } = await supabase.storage
-      .from('report-pdfs')
-      .download(report.pdf_storage_path);
+    // Collect all report document blocks
+    const documentBlocks: any[] = [];
 
-    if (downloadError || !fileData) {
+    // Use pdf_storage_paths (array) if available, otherwise fall back to single path
+    const storagePaths: string[] = report.pdf_storage_paths?.length
+      ? report.pdf_storage_paths
+      : report.pdf_storage_path
+        ? [report.pdf_storage_path]
+        : [];
+
+    if (storagePaths.length === 0) {
       await supabase
         .from('reports')
-        .update({ ai_status: 'failed', ai_error: 'Failed to download PDF from storage' })
+        .update({ ai_status: 'failed', ai_error: 'No files attached to this report' })
         .eq('id', reportId);
       return;
     }
 
-    // Convert PDF to base64 for Anthropic's native PDF support
-    const buffer = Buffer.from(await fileData.arrayBuffer());
-    const pdfBase64 = buffer.toString('base64');
+    // Download all report files
+    for (const path of storagePaths) {
+      const block = await downloadAsDocBlock(supabase, 'report-pdfs', path);
+      if (block) documentBlocks.push(block);
+    }
 
-    // Fetch previous completed report for month-on-month comparison
-    const { data: previousReport } = await supabase
+    if (documentBlocks.length === 0) {
+      await supabase
+        .from('reports')
+        .update({ ai_status: 'failed', ai_error: 'Failed to download report files from storage' })
+        .eq('id', reportId);
+      return;
+    }
+
+    // Download selected client files (if any)
+    const clientFileBlocks: any[] = [];
+    const clientFileIds: string[] = report.client_file_ids || [];
+
+    if (clientFileIds.length > 0) {
+      const { data: clientFiles } = await supabase
+        .from('client_files')
+        .select('*')
+        .in('id', clientFileIds);
+
+      if (clientFiles) {
+        for (const cf of clientFiles) {
+          const block = await downloadAsDocBlock(supabase, 'client-files', cf.file_path);
+          if (block) {
+            clientFileBlocks.push(block);
+          }
+        }
+      }
+    }
+
+    // Fetch last 6 completed reports for richer historical context
+    const { data: previousReports } = await supabase
       .from('reports')
-      .select('ai_enhanced_html')
+      .select('ai_enhanced_html, title, period_start, period_end')
       .eq('client_id', report.client_id)
       .eq('ai_status', 'completed')
       .neq('id', reportId)
       .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
-
-    const previousHtml = previousReport?.ai_enhanced_html || null;
+      .limit(6);
 
     // Build prompt context
     const clientName = (report.clients as any)?.name || 'the client';
@@ -53,9 +122,38 @@ async function processReport(reportId: string, report: any) {
       ? ` for the period ${report.period_start} to ${report.period_end}`
       : '';
 
+    // Build historical context
+    let historicalContext = '';
+    if (previousReports && previousReports.length > 0) {
+      // Reverse so they're in chronological order (oldest first)
+      const chronological = [...previousReports].reverse();
+
+      historicalContext = `
+
+HISTORICAL REPORTS FOR COMPARISON:
+The following are previous reports for this client in chronological order. Use them to identify trends and provide month-on-month and longer-term comparisons where relevant.
+
+${chronological.map((r, i) => {
+  const period = r.period_start && r.period_end ? `${r.period_start} to ${r.period_end}` : 'Unknown period';
+  return `<previous_report index="${i + 1}" title="${r.title || 'Untitled'}" period="${period}">
+${r.ai_enhanced_html}
+</previous_report>`;
+}).join('\n\n')}
+
+Based on the historical data above, include a "Trends & Comparison" section showing:
+1. Month-on-month changes from the most recent previous report
+2. Longer-term trends across multiple reporting periods where data is available
+Use the .m-change.up / .m-change.down pill styles for positive/negative changes.`;
+    }
+
     const promptText = `You are a digital marketing report specialist for Shtudio, a Sydney digital agency.
 
-Your task is to produce a complete, self-contained HTML file for ${clientName}${periodInfo} that matches the exact design standard of the reference template below. The attached PDF document contains all the raw data and metrics you need — extract everything from it.
+Your task is to produce a complete, self-contained HTML file for ${clientName}${periodInfo} that matches the exact design standard of the reference template below. The attached document(s) contain all the raw data and metrics you need — extract everything from them.${documentBlocks.length > 1 ? `
+
+NOTE: Multiple report files have been attached. Use data from ALL of them to build a comprehensive report.` : ''}${clientFileBlocks.length > 0 ? `
+
+ADDITIONAL CONTEXT FILES:
+The following additional files from the client's file library have been included for context (e.g. brand guidelines, strategy docs, previous data). Use them to inform your analysis and recommendations where relevant.` : ''}
 
 Here is your design template:
 
@@ -628,7 +726,7 @@ Here is your design template:
 </body>
 </html>
 
-Use this as your design template. Preserve all CSS exactly. Replace the content, data, client name, brand colours, and metrics with the data extracted from the attached PDF document. Output only raw HTML with no markdown, no code fences, nothing else.
+Use this as your design template. Preserve all CSS exactly. Replace the content, data, client name, brand colours, and metrics with the data extracted from the attached document(s). Output only raw HTML with no markdown, no code fences, nothing else.
 
 BRAND COLOUR INSTRUCTIONS:
 - The template uses --brand and --brand-light CSS variables (default #2B6CB8 / #4A90D9). Change these to match the client's brand colours if you can infer them from context, otherwise keep the defaults.
@@ -645,14 +743,17 @@ The client logo URL is: ${clientLogoUrl || 'NONE - use text fallback'}
 The report period is: ${periodInfo || 'as indicated in the PDF data'}${report.custom_instructions ? `
 
 ADDITIONAL INSTRUCTIONS FROM THE SHTUDIO TEAM FOR THIS SPECIFIC REPORT:
-${report.custom_instructions}` : ''}${previousHtml ? `
+${report.custom_instructions}` : ''}${historicalContext}`;
 
-MONTH-ON-MONTH COMPARISON:
-Below is the HTML of the previous report for this client. Where relevant, compare key metrics month-on-month and highlight improvements or declines. Add a "Month-on-Month Comparison" section showing the change in key metrics as a table (metric name, previous value, current value, change). Use the .m-change.up / .m-change.down pill styles for positive/negative changes.
-
-<previous_report>
-${previousHtml}
-</previous_report>` : ''}`;
+    // Build content blocks: report documents + client file documents + prompt
+    const contentBlocks: any[] = [
+      ...documentBlocks,
+      ...clientFileBlocks,
+      {
+        type: 'text',
+        text: promptText,
+      },
+    ];
 
     // Call Claude API
     const message = await anthropic.messages.create({
@@ -661,20 +762,7 @@ ${previousHtml}
       messages: [
         {
           role: 'user',
-          content: [
-            {
-              type: 'document',
-              source: {
-                type: 'base64',
-                media_type: 'application/pdf',
-                data: pdfBase64,
-              },
-            } as any,
-            {
-              type: 'text',
-              text: promptText,
-            },
-          ],
+          content: contentBlocks,
         },
       ],
     });
@@ -704,12 +792,14 @@ ${previousHtml}
       resource_id: reportId,
       metadata: {
         client_id: report.client_id,
-        pdf_size_bytes: buffer.length,
+        file_count: storagePaths.length,
+        client_file_count: clientFileBlocks.length,
+        historical_report_count: previousReports?.length || 0,
         html_length: enhancedHtml.length,
       },
     });
 
-    // Send email notification (non-blocking — failure should not break the flow)
+    // Send email notification (non-blocking)
     try {
       await sendReportCompletedEmail({
         clientName,
@@ -722,7 +812,6 @@ ${previousHtml}
   } catch (error: any) {
     console.error('Background report processing error:', error);
 
-    // Mark report as failed
     try {
       const supabase = createServiceSupabase();
       await supabase
@@ -739,8 +828,6 @@ ${previousHtml}
 }
 
 // ── HTTP handler ──
-// Validates the request, sets status to "processing", returns 200 immediately,
-// then runs the actual Claude API call in the background via waitUntil.
 export async function POST(request: Request) {
   try {
     const { reportId } = await request.json();
@@ -751,7 +838,7 @@ export async function POST(request: Request) {
 
     const supabase = createServiceSupabase();
 
-    // Validate report exists and has a PDF
+    // Validate report exists and has files
     const { data: report, error: fetchError } = await supabase
       .from('reports')
       .select('*, clients(name, logo_url)')
@@ -762,8 +849,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Report not found' }, { status: 404 });
     }
 
-    if (!report.pdf_storage_path) {
-      return NextResponse.json({ error: 'No PDF attached to this report' }, { status: 400 });
+    const hasPaths = report.pdf_storage_paths?.length > 0 || report.pdf_storage_path;
+    if (!hasPaths) {
+      return NextResponse.json({ error: 'No files attached to this report' }, { status: 400 });
     }
 
     // Set status to processing immediately
@@ -775,7 +863,7 @@ export async function POST(request: Request) {
     // Run the heavy processing in the background after the response is sent
     waitUntil(processReport(reportId, report));
 
-    // Return immediately — the client will poll for status updates
+    // Return immediately
     return NextResponse.json({ success: true, reportId, status: 'processing' });
   } catch (error: any) {
     console.error('Report enhancement error:', error);
