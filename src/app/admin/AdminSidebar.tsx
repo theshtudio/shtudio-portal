@@ -53,6 +53,14 @@ export function AdminSidebar({ profile }: AdminSidebarProps) {
             {item.label}
           </Link>
         ))}
+        <div style={{ flex: 1 }} />
+        <Link
+          href="/admin/help"
+          className={`${styles.navLink} ${isActive('/admin/help') ? styles.navLinkActive : ''}`}
+        >
+          <span className={styles.navIcon}>❓</span>
+          Help & Best Practices
+        </Link>
       </nav>
 
       <div className={styles.sidebarFooter}>

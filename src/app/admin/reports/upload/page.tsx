@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/Button/Button';
 import { Input } from '@/components/Input/Input';
+import { HelpTooltip } from '@/components/Tooltip/Tooltip';
 import type { Client, ClientFile } from '@/lib/types';
 import styles from './page.module.css';
 
@@ -415,7 +416,10 @@ export default function UploadReportPage() {
         {error && <div className={styles.error}>{error}</div>}
 
         <div className={styles.field}>
-          <label className={styles.label}>Report Files *</label>
+          <label className={styles.label}>
+            Report Files *
+            <HelpTooltip text="Upload the raw PDF or export from Google Ads, GA, or other platforms. Multiple files can be combined into one report." />
+          </label>
           <div
             className={`${styles.dropzone} ${dragActive ? styles.dropzoneActive : ''}`}
             onDragEnter={handleDrag}
@@ -487,7 +491,10 @@ export default function UploadReportPage() {
         {/* Client Files Checklist */}
         {selectedClient && clientFiles.length > 0 && (
           <div className={styles.field}>
-            <label className={styles.label}>Include Client Files as Context</label>
+            <label className={styles.label}>
+              Include Client Files as Context
+              <HelpTooltip text="Upload historical reports, ad exports, or analytics data. These are summarised once and used automatically in future reports for better comparisons." />
+            </label>
             <p className={styles.fieldHint}>
               Select files from the client library to include as additional context for Claude.
             </p>
@@ -546,7 +553,10 @@ export default function UploadReportPage() {
         </div>
 
         <div className={styles.field}>
-          <label className={styles.label}>Custom Instructions for AI (optional)</label>
+          <label className={styles.label}>
+            Custom Instructions for AI (optional)
+            <HelpTooltip text="Add specific goals, tone preferences, or metrics to highlight. E.g. 'Client is focused on ROAS, emphasise cost efficiency. Keep language simple — client is not technical.'" />
+          </label>
           <textarea
             className={styles.textarea}
             value={customInstructions}
