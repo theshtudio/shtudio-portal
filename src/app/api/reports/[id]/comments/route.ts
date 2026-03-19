@@ -10,7 +10,7 @@ export async function GET(
 
   const { data: comments, error } = await supabase
     .from('report_comments')
-    .select('*, profiles(full_name, email)')
+    .select('*')
     .eq('report_id', reportId)
     .order('created_at', { ascending: true });
 
@@ -18,7 +18,29 @@ export async function GET(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ comments: comments || [] });
+  // Fetch author names separately since the join may not work without a FK
+  const userIds = [...new Set((comments || []).map((c) => c.user_id).filter(Boolean))];
+  let profileMap: Record<string, { full_name: string | null; email: string | null }> = {};
+
+  if (userIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .in('id', userIds);
+
+    if (profiles) {
+      profileMap = Object.fromEntries(
+        profiles.map((p) => [p.id, { full_name: p.full_name, email: p.email }]),
+      );
+    }
+  }
+
+  const enrichedComments = (comments || []).map((c) => ({
+    ...c,
+    profiles: profileMap[c.user_id] || null,
+  }));
+
+  return NextResponse.json({ comments: enrichedComments });
 }
 
 export async function POST(
@@ -35,7 +57,7 @@ export async function POST(
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role')
+    .select('role, full_name, email')
     .eq('id', user.id)
     .single();
 
@@ -59,12 +81,17 @@ export async function POST(
       user_id: user.id,
       comment: comment.trim(),
     })
-    .select('*, profiles(full_name, email)')
+    .select('*')
     .single();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ comment: newComment }, { status: 201 });
+  const enrichedComment = {
+    ...newComment,
+    profiles: { full_name: profile.full_name ?? null, email: profile.email ?? null },
+  };
+
+  return NextResponse.json({ comment: enrichedComment }, { status: 201 });
 }
