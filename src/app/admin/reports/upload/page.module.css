@@ -218,6 +218,129 @@
   flex-shrink: 0;
 }
 
+/* ── Report Type Selector ── */
+
+.typeGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.typeBtn {
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-dark-50);
+  color: var(--color-dark-600);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+
+.typeBtn:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-50, #FFF7ED);
+  color: var(--color-dark);
+}
+
+.typeBtnActive {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+  font-weight: 600;
+}
+
+.typeBtnActive:hover {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+}
+
+/* ── Options ── */
+
+.optionsList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  background: var(--color-white);
+}
+
+.optionsGrouped {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  background: var(--color-white);
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.optionsGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.optionsGroupTitle {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-primary);
+  padding: 4px 8px 2px;
+  margin-top: 4px;
+}
+
+.optionsGroup:first-child .optionsGroupTitle {
+  margin-top: 0;
+}
+
+.optionCheck {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+
+.optionCheck:hover {
+  background: var(--color-dark-50);
+}
+
+.optionCheck input[type="checkbox"] {
+  flex-shrink: 0;
+  accent-color: var(--color-primary);
+}
+
+.optionLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-dark-600);
+}
+
+.adminBadge {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-dark-400);
+  background: var(--color-dark-50);
+  border: 1px solid var(--color-border);
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
 .textarea {
   width: 100%;
   padding: var(--space-2) var(--space-3);

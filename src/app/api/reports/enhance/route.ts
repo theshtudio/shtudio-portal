@@ -146,9 +146,45 @@ Based on the historical data above, include a "Trends & Comparison" section show
 Use the .m-change.up / .m-change.down pill styles for positive/negative changes.`;
     }
 
+    // Build report type + options instructions
+    let reportTypeInstructions = '';
+    if (report.report_type) {
+      const typeDisplayNames: Record<string, string> = {
+        google_ads: 'Google Ads',
+        gbp: 'Google Business Profile',
+        seo: 'SEO',
+        meta_ads: 'Meta Ads',
+        microsoft_ads: 'Microsoft Ads',
+        linkedin_ads: 'LinkedIn Ads',
+        combined: 'Combined Report',
+      };
+      const typeName = typeDisplayNames[report.report_type] || report.report_type;
+      reportTypeInstructions += `\n\nREPORT TYPE: ${typeName}`;
+
+      if (report.report_options) {
+        const opts = report.report_options as {
+          sections?: string[];
+          adminOnlySections?: string[];
+          globals?: string[];
+        };
+
+        if (opts.sections && opts.sections.length > 0) {
+          reportTypeInstructions += `\n\nYou MUST include these sections: ${opts.sections.join('; ')}. Do not include sections that are not listed unless they contain data that clearly belongs in the report.`;
+        }
+
+        if (opts.adminOnlySections && opts.adminOnlySections.length > 0) {
+          reportTypeInstructions += `\n\nAdminOnly sections (include these but label them as internal reference only with a discreet "Internal Note" label): ${opts.adminOnlySections.join('; ')}`;
+        }
+
+        if (opts.globals && opts.globals.length > 0) {
+          reportTypeInstructions += `\n\nGlobal options: ${opts.globals.join('; ')}`;
+        }
+      }
+    }
+
     const promptText = `You are a digital marketing report specialist for Shtudio, a Sydney digital agency.
 
-Your task is to produce a complete, self-contained HTML file for ${clientName}${periodInfo} that matches the exact design standard of the reference template below. The attached document(s) contain all the raw data and metrics you need — extract everything from them.${documentBlocks.length > 1 ? `
+Your task is to produce a complete, self-contained HTML file for ${clientName}${periodInfo} that matches the exact design standard of the reference template below. The attached document(s) contain all the raw data and metrics you need — extract everything from them.${reportTypeInstructions}${documentBlocks.length > 1 ? `
 
 NOTE: Multiple report files have been attached. Use data from ALL of them to build a comprehensive report.` : ''}${clientFileBlocks.length > 0 ? `
 

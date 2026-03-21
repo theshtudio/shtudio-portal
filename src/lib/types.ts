@@ -48,6 +48,8 @@ export interface Report {
   ai_status: ReportAiStatus;
   ai_error: string | null;
   custom_instructions: string | null;
+  report_type: string | null;
+  report_options: Record<string, unknown> | null;
   is_published: boolean;
   published_at: string | null;
   created_by: string | null;
