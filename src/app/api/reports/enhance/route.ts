@@ -207,9 +207,10 @@ Here is your design template:
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
   :root {
-    --brand: #2B6CB8;
-    --brand-light: #4A90D9;
-    --shtudio-orange: #F26522;
+    --primary: #2B6CB8;
+    --primary-light: #4A90D9;
+    --primary-dark: #1A4A8A;
+    --accent: #F26522;
     --dark: #1A1A2E;
     --charcoal: #2D2D2D;
     --mid: #6B7280;
@@ -278,7 +279,7 @@ Here is your design template:
   .header-right .report-type {
     font-size: 13px;
     font-weight: 600;
-    color: var(--shtudio-orange);
+    color: var(--accent);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     margin-bottom: 4px;
@@ -294,7 +295,7 @@ Here is your design template:
   }
   .header-accent {
     height: 4px;
-    background: linear-gradient(90deg, var(--shtudio-orange) 0%, var(--charcoal) 100%);
+    background: linear-gradient(90deg, var(--accent) 0%, var(--charcoal) 100%);
   }
 
   /* -- MAIN -- */
@@ -310,7 +311,7 @@ Here is your design template:
     font-weight: 600;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: var(--shtudio-orange);
+    color: var(--accent);
     margin-bottom: 6px;
   }
   .section-title {
@@ -323,7 +324,7 @@ Here is your design template:
 
   /* -- HERO SUMMARY -- */
   .hero-summary {
-    background: var(--brand);
+    background: var(--primary);
     border-radius: 16px;
     padding: 36px 40px;
     color: white;
@@ -615,7 +616,7 @@ Here is your design template:
   .task-num {
     width: 28px;
     height: 28px;
-    background: var(--brand);
+    background: var(--primary);
     color: white;
     border-radius: 6px;
     display: flex;
@@ -641,7 +642,7 @@ Here is your design template:
     padding: 28px 20px;
     font-size: 12px;
   }
-  footer a { color: var(--shtudio-orange); text-decoration: none; }
+  footer a { color: var(--accent); text-decoration: none; }
   footer .footer-logo {
     margin-bottom: 8px;
   }
@@ -660,7 +661,7 @@ Here is your design template:
 
   /* -- ROAS HIGHLIGHT -- */
   .roas-highlight {
-    background: linear-gradient(135deg, #1A3A5C 0%, #2B6CB8 100%);
+    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
     border-radius: 16px;
     padding: 32px 36px;
     color: white;
@@ -770,8 +771,11 @@ Here is your design template:
 Use this as your design template. Preserve all CSS exactly. Replace the content, data, client name, brand colours, and metrics with the data extracted from the attached document(s). Output only raw HTML with no markdown, no code fences, nothing else.
 
 BRAND COLOUR INSTRUCTIONS:
-- The template uses --brand and --brand-light CSS variables (default #2B6CB8 / #4A90D9). Change these to match the client's brand colours if you can infer them from context, otherwise keep the defaults.
-- The ROAS highlight gradient and accent colours should also be adapted to the client's brand.
+- IMPORTANT: Use the FIXED blue colour scheme for ALL reports regardless of client. Do NOT change the CSS variables to match client brand colours. The variables are: --primary (#2B6CB8), --primary-light (#4A90D9), --primary-dark (#1A4A8A), --accent (#F26522 — Shtudio orange).
+- The hero summary card, metric card accents, funnel steps, ROAS callout, campaign table highlights, and task number badges must all use shades of --primary and --primary-light.
+- The Shtudio orange (--accent) must ONLY be used for: small section labels (e.g. "At a glance"), the header accent bar, the report-type label, and footer links. NEVER use --accent as a background colour for large sections, cards, or hero areas.
+- Funnel steps should use varying opacities/shades of --primary (e.g. the widest step uses --primary, narrower steps use --primary-light or lighter shades).
+- This ensures all reports look consistent regardless of client.
 
 HEADER INSTRUCTIONS:
 - The header uses a light background (#F7F9FC), NOT dark.
