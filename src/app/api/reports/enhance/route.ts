@@ -777,6 +777,9 @@ BRAND COLOUR INSTRUCTIONS:
 - Funnel steps should use varying opacities/shades of --primary (e.g. the widest step uses --primary, narrower steps use --primary-light or lighter shades).
 - This ensures all reports look consistent regardless of client.
 
+TECHNICAL ACCURACY INSTRUCTIONS:
+- For any sections containing technical specifications, creative asset requirements, image sizes, character limits, video formats, or ad specs — reproduce these with 100% accuracy. Do not summarise, paraphrase, or omit any technical details. These sections must be complete and exact. Only reformat them visually — do not change the content.
+
 HEADER INSTRUCTIONS:
 - The header uses a light background (#F7F9FC), NOT dark.
 - Left side: client logo area. ${clientLogoUrl ? `The client has a logo - render it as: <img src="${clientLogoUrl}" alt="${clientName}" style="max-height:60px;max-width:200px;object-fit:contain;">` : `No logo URL is available - render the client name "${clientName}" as styled text using the .header-logo-text class (Anton font, charcoal, uppercase).`}
