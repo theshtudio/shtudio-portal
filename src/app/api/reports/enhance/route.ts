@@ -180,6 +180,11 @@ Use the .m-change.up / .m-change.down pill styles for positive/negative changes.
           reportTypeInstructions += `\n\nGlobal options: ${opts.globals.join('; ')}`;
         }
       }
+
+      // SEO-specific instruction for backlinks
+      if (report.report_type === 'seo' || report.report_type === 'combined') {
+        reportTypeInstructions += `\n\nSEO BACKLINKS INSTRUCTION: For the backlinks and directories section, mention only the total number of new backlinks and directories built this month — do not list individual URLs. For example: 'This month we built 10 new backlinks across directories, forums and profile sites.' Never output the actual URLs in the client-facing report.`;
+      }
     }
 
     const promptText = `You are a digital marketing report specialist for Shtudio, a Sydney digital agency.

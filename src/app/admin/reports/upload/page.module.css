@@ -259,6 +259,45 @@
   color: white;
 }
 
+/* ── Platform Pills (Combined Report) ── */
+
+.platformPills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.platformPill {
+  padding: 6px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  background: var(--color-white);
+  color: var(--color-dark-500);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.platformPill:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.platformPillActive {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+  font-weight: 600;
+}
+
+.platformPillActive:hover {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+}
+
 /* ── Options ── */
 
 .optionsList {

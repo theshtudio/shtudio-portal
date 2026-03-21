@@ -127,9 +127,10 @@ export default function UploadReportPage() {
   const [globalOptions, setGlobalOptions] = useState<ReportOption[]>(
     GLOBAL_OPTIONS.map((o) => ({ ...o })),
   );
-  // For combined report, track grouped options
+  // For combined report, track platform selection and grouped options
+  const [selectedPlatforms, setSelectedPlatforms] = useState<ReportType[]>([]);
   const [combinedGroups, setCombinedGroups] = useState<
-    { platform: string; options: ReportOption[] }[]
+    { platform: string; key: ReportType; options: ReportOption[] }[]
   >([]);
 
   // Client files
@@ -233,17 +234,48 @@ export default function UploadReportPage() {
     setReportType(type);
 
     if (type === 'combined') {
-      const groups = getCombinedOptions();
-      setCombinedGroups(groups);
       setSectionOptions([]);
+      setCombinedGroups([]);
+      setSelectedPlatforms([]);
     } else {
       const typeInfo = REPORT_TYPES.find((rt) => rt.key === type);
       setSectionOptions(typeInfo ? typeInfo.options.map((o) => ({ ...o })) : []);
       setCombinedGroups([]);
+      setSelectedPlatforms([]);
     }
 
     // Reset global options to defaults
     setGlobalOptions(GLOBAL_OPTIONS.map((o) => ({ ...o })));
+  }
+
+  // Toggle a platform in combined mode
+  function togglePlatform(platformKey: ReportType) {
+    setSelectedPlatforms((prev) => {
+      const next = prev.includes(platformKey)
+        ? prev.filter((k) => k !== platformKey)
+        : [...prev, platformKey];
+
+      // Rebuild combined groups for selected platforms only
+      const groups = getCombinedOptions()
+        .filter((_, i) => next.includes(REPORT_TYPES[i].key))
+        .map((g, _i) => {
+          const rt = REPORT_TYPES.find((r) => r.displayName === g.platform);
+          return { ...g, key: rt!.key };
+        });
+
+      // Preserve existing checked state for groups that were already showing
+      const existingByPlatform = new Map(
+        combinedGroups.map((cg) => [cg.platform, cg]),
+      );
+      const merged = groups.map((g) => {
+        const existing = existingByPlatform.get(g.platform);
+        if (existing) return existing;
+        return g;
+      });
+
+      setCombinedGroups(merged);
+      return next;
+    });
   }
 
   function toggleSectionOption(index: number) {
@@ -548,7 +580,27 @@ export default function UploadReportPage() {
         {/* Rest of the form only shows after type is selected */}
         {reportType && (
           <>
+            {/* Combined: platform selector sub-step */}
+            {reportType === 'combined' && (
+              <div className={styles.field}>
+                <label className={styles.label}>Select platforms to include:</label>
+                <div className={styles.platformPills}>
+                  {REPORT_TYPES.map((rt) => (
+                    <button
+                      key={rt.key}
+                      type="button"
+                      className={`${styles.platformPill} ${selectedPlatforms.includes(rt.key) ? styles.platformPillActive : ''}`}
+                      onClick={() => togglePlatform(rt.key)}
+                    >
+                      {rt.displayName}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Step 2 — Dynamic Section Checkboxes */}
+            {(reportType !== 'combined' || selectedPlatforms.length > 0) && (
             <div className={styles.field}>
               <label className={styles.label}>Report Sections</label>
               <p className={styles.fieldHint}>
@@ -598,6 +650,7 @@ export default function UploadReportPage() {
                 </div>
               )}
             </div>
+            )}
 
             {/* Global Options */}
             <div className={styles.field}>
