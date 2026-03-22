@@ -204,7 +204,25 @@ ADDITIONAL CONTEXT FILES:
 The following additional files from the client's file library have been included for context (e.g. brand guidelines, strategy docs, previous data). Use them to inform your analysis and recommendations where relevant.` : ''}
 
 CHART GENERATION INSTRUCTIONS:
-Where the data supports it, generate interactive Chart.js charts embedded directly in the HTML. Load Chart.js from https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js in a <script> tag in the <head>.
+Where the data supports it, generate interactive Chart.js charts embedded directly in the HTML.
+
+CRITICAL — Script loading order:
+* Load Chart.js in the <head> as a BLOCKING script (no defer, no async):
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+* ALL chart initialisation code MUST be in a single <script> tag at the very bottom of <body> (just before </body>), wrapped like this:
+  <script>
+  document.addEventListener('DOMContentLoaded', function() {
+    if (typeof Chart === 'undefined') {
+      document.querySelectorAll('.chart-container').forEach(function(el) { el.style.display = 'none'; });
+      return;
+    }
+    // all new Chart(...) calls go here
+  });
+  </script>
+* NEVER put chart initialisation in the <head> or inline in the HTML body. NEVER use defer or async on the Chart.js script tag.
+
+CRITICAL — Do not output empty charts:
+If you cannot extract actual data arrays with at least 7 data points for line charts, do NOT include the Performance Trends section or any chart containers at all. An empty chart card is worse than no chart. Only include charts when you have real, extracted data to populate them. If device data has fewer than 2 segments, skip the doughnut charts. If campaign data has fewer than 2 campaigns, skip the campaign bar chart.
 
 Use the following chart patterns:
 
@@ -228,6 +246,7 @@ Chart styling rules:
 * Each chart card has a subtle question mark tooltip icon next to the title (title attribute explaining what the chart shows)
 * Charts must be fully responsive — use responsive: true, maintainAspectRatio: true
 * Each <canvas> needs a unique id like chart-clicks-ctr, chart-conversions, etc.
+* Wrap each canvas in a <div class="chart-container">
 
 Only include charts where the underlying data actually exists in the PDF. If daily data is not available, skip the line charts. If device data is not available, skip the doughnut charts. Never fabricate data for charts.
 
@@ -467,6 +486,10 @@ Here is your design template:
   .m-change.up { background: #DCFCE7; color: var(--green); }
   .m-change.down { background: #FEE2E2; color: var(--red); }
   .m-change.good-down { background: #DCFCE7; color: var(--green); }
+
+  /* -- CHART FALLBACKS -- */
+  .chart-container:empty { display: none; }
+  .chart-section:has(.chart-container:empty) { display: none; }
 
   /* -- BAR CHART -- */
   .chart-section {
