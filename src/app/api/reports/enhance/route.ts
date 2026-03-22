@@ -5,6 +5,7 @@ import { createServiceSupabase } from '@/lib/supabase/server';
 import { sendReportCompletedEmail } from '@/lib/email';
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import mammoth from 'mammoth';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -22,7 +23,8 @@ function getMediaType(path: string, contentType?: string): string {
   return 'application/pdf';
 }
 
-// Download a file from storage and return as a document content block
+// Download a file from storage and return as a content block for Claude
+// .docx files are extracted to plain text via mammoth; PDFs are sent as base64 document blocks
 async function downloadAsDocBlock(
   supabase: ReturnType<typeof createServiceSupabase>,
   bucket: string,
@@ -35,6 +37,29 @@ async function downloadAsDocBlock(
   }
 
   const buffer = Buffer.from(await data.arrayBuffer());
+  const ext = path.split('.').pop()?.toLowerCase();
+
+  // For .docx files, extract raw text and send as a text block
+  if (ext === 'docx') {
+    try {
+      const result = await mammoth.extractRawText({ buffer });
+      const text = result.value;
+      if (!text || text.trim().length === 0) {
+        console.warn(`Empty text extracted from .docx: ${bucket}/${path}`);
+        return null;
+      }
+      console.log(`Extracted ${text.length} chars from .docx: ${path}`);
+      return {
+        type: 'text',
+        text: `[Content extracted from ${path.split('/').pop()}]\n\n${text}`,
+      };
+    } catch (docxErr) {
+      console.error(`Failed to extract text from .docx ${path}:`, docxErr);
+      return null;
+    }
+  }
+
+  // For PDFs and other supported types, send as base64 document block
   const base64 = buffer.toString('base64');
   const mediaType = getMediaType(path);
 
