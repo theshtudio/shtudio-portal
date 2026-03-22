@@ -187,16 +187,11 @@ Use the .m-change.up / .m-change.down pill styles for positive/negative changes.
       }
     }
 
-    const promptText = `IMPORTANT — FIRST TWO LINES INSTRUCTION (MUST BE FOLLOWED):
-Before generating the report, extract two things from the PDF:
-1. The client/business name as it appears in the PDF
-2. The type of report (one of: Google Ads, SEO, Meta Ads, Microsoft Ads, LinkedIn Ads, Google Business Profile)
+    const promptText = `BEFORE GENERATING THE REPORT, output these two lines first, then a blank line, then the HTML:
+CLIENT_NAME: [exact client/business name as it appears in the PDF]
+REPORT_TYPE: [one of: Google Ads, SEO, Meta Ads, Microsoft Ads, LinkedIn Ads, Google Business Profile]
 
-Output these on the very first two lines of your response in this exact format:
-CLIENT_NAME: [name as found in PDF]
-REPORT_TYPE: [detected type]
-
-Then a blank line, then the full HTML report. These lines will be stripped before display. You MUST include both lines even if uncertain — use your best guess.
+Then output the complete HTML report starting with <!DOCTYPE html>. The two lines above will be stripped — they are for internal processing only. You MUST include both lines.
 
 You are a digital marketing report specialist for Shtudio, a Sydney digital agency.
 
@@ -865,16 +860,20 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
       .join('');
 
     // ── Mismatch detection: parse CLIENT_NAME and REPORT_TYPE ──
+    console.log('RAW_RESPONSE_START:', rawResponse.substring(0, 500));
+
     let detectedClientName: string | null = null;
     let detectedReportType: string | null = null;
 
     const clientNameMatch = rawResponse.match(/CLIENT_NAME:\s*(.+)/i);
+    console.log('CLIENT_NAME_MATCH:', clientNameMatch);
     if (clientNameMatch) {
       detectedClientName = clientNameMatch[1].trim();
       rawResponse = rawResponse.replace(/CLIENT_NAME:\s*.+[\r\n]*/i, '');
     }
 
     const reportTypeMatch = rawResponse.match(/REPORT_TYPE:\s*(.+)/i);
+    console.log('REPORT_TYPE_MATCH:', reportTypeMatch);
     if (reportTypeMatch) {
       detectedReportType = reportTypeMatch[1].trim();
       rawResponse = rawResponse.replace(/REPORT_TYPE:\s*.+[\r\n]*/i, '');
