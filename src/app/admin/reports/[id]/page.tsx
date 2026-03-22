@@ -7,6 +7,7 @@ import { ShareLink } from './ShareLink';
 import { CustomInstructions } from './CustomInstructions';
 import { ReportComments } from './ReportComments';
 import { ClientMismatchBanner } from './ClientMismatchBanner';
+import { ProcessingProgress } from './ProcessingProgress';
 import type { ReportCommentWithAuthor } from '@/lib/types';
 import styles from './page.module.css';
 
@@ -130,13 +131,7 @@ export default async function ReportDetailPage({
             dangerouslySetInnerHTML={{ __html: report.ai_enhanced_html }}
           />
         ) : report.ai_status === 'processing' ? (
-          <div className={styles.processingState}>
-            <div className={styles.processingIcon}>&#9203;</div>
-            <div className={styles.processingText}>
-              AI is processing this report. This usually takes 30-60 seconds.
-            </div>
-            <ReportActions report={report} showRefresh />
-          </div>
+          <ProcessingProgress reportId={report.id} />
         ) : report.ai_status === 'failed' ? (
           <div>
             <div className={styles.errorBox}>
