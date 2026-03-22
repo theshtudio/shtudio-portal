@@ -268,6 +268,36 @@ NOTE: Multiple report files have been attached. Use data from ALL of them to bui
 ADDITIONAL CONTEXT FILES:
 The following additional files from the client's file library have been included for context (e.g. brand guidelines, strategy docs, previous data). Use them to inform your analysis and recommendations where relevant.` : ''}
 
+CHART GENERATION INSTRUCTIONS:
+Where the data supports it, generate interactive Chart.js charts embedded directly in the HTML. Load Chart.js from https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js in a <script> tag in the <head>.
+
+Use the following chart patterns:
+
+1. Daily performance line charts (dual-axis) — if daily/weekly data exists (clicks, impressions, cost, conversions, CTR, CPC etc.), render dual-axis line charts. Left Y-axis for volume metrics (clicks, conversions, cost), right Y-axis for rate metrics (CTR %, conversion rate %, CPC). Use smooth curves (tension: 0.4). Render 3 separate charts side by side in a responsive grid:
+   (a) Clicks & CTR over time
+   (b) Conversions & Conversion Rate over time
+   (c) Cost & Avg CPC over time
+
+2. Device breakdown doughnut charts — if device split data exists (desktop/mobile/tablet breakdown for cost, clicks, conversions), render 3 doughnut charts side by side: Cost by Device, Conversions by Device, Clicks by Device. Show percentage labels inside segments.
+
+3. Campaign performance bar chart — if multiple campaigns exist, render a horizontal bar chart showing cost or clicks per campaign, sorted descending. This complements (not replaces) the campaign table.
+
+Chart styling rules:
+* Background: white, border-radius: 12px, padding: 24px, box-shadow: 0 2px 8px rgba(0,0,0,0.08)
+* Color palette: ['#2B6CB8', '#38A169', '#D69E2E', '#C53030', '#805AD5', '#DD6B20'] — use these in order
+* Grid lines: color: 'rgba(0,0,0,0.06)'
+* Font: 'DM Sans' for all chart labels and tooltips
+* Tooltip: dark background #1a1a2e, white text, show both datasets on hover
+* Legend: positioned top, use dot indicators not box
+* Charts sit in a section titled 'Performance Trends' with the same section header style as the rest of the report
+* Each chart card has a subtle question mark tooltip icon next to the title (title attribute explaining what the chart shows)
+* Charts must be fully responsive — use responsive: true, maintainAspectRatio: true
+* Each <canvas> needs a unique id like chart-clicks-ctr, chart-conversions, etc.
+
+Only include charts where the underlying data actually exists in the PDF. If daily data is not available, skip the line charts. If device data is not available, skip the doughnut charts. Never fabricate data for charts.
+
+Tables and charts can coexist — use charts for trend/visual data, tables for detailed breakdowns. Do not replace a data-rich table with a chart; show both when both add value.
+
 Here is your design template:
 
 <!DOCTYPE html>
