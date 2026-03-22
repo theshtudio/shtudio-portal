@@ -61,12 +61,12 @@ export default async function ShareReportPage({
   }
 
   return (
-    <>
+    <div className={styles.sharePage}>
       <DownloadButton />
       <div
         className={styles.reportContainer}
         dangerouslySetInnerHTML={{ __html: report.ai_enhanced_html }}
       />
-    </>
+    </div>
   );
 }

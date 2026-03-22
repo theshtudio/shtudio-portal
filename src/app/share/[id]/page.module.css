@@ -115,16 +115,16 @@
   }
 
   /* Hide any portal navigation that might be present */
-  :global(nav),
-  :global(header),
-  :global(footer),
-  :global([class*="sidebar"]),
-  :global([class*="navbar"]),
-  :global([class*="topbar"]) {
+  .sharePage :global(nav),
+  .sharePage :global(header),
+  .sharePage :global(footer),
+  .sharePage :global([class*="sidebar"]),
+  .sharePage :global([class*="navbar"]),
+  .sharePage :global([class*="topbar"]) {
     display: none !important;
   }
 
-  body {
+  .sharePage :global(body) {
     margin: 0 !important;
     padding: 0 !important;
     -webkit-print-color-adjust: exact !important;
