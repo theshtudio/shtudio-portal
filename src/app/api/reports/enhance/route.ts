@@ -85,6 +85,78 @@ async function processReport(reportId: string, report: any) {
       return;
     }
 
+    // ── Client mismatch detection ──
+    // Send the first document to Claude for client name extraction
+    try {
+      const clientName = (report.clients as any)?.name || '';
+      const clientWebsite = (report.clients as any)?.website || '';
+      const firstDoc = documentBlocks[0];
+
+      const mismatchRes = await anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 200,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              firstDoc,
+              {
+                type: 'text',
+                text: 'Extract the client name, company name, or website domain mentioned in this report. Return ONLY a JSON object with no other text: { "clientName": "string", "domain": "string" }. If not found, use empty strings.',
+              },
+            ],
+          },
+        ],
+      });
+
+      const mismatchText = mismatchRes.content
+        .filter((b: any) => b.type === 'text')
+        .map((b: any) => b.text)
+        .join('');
+
+      // Try to parse the JSON response
+      const jsonMatch = mismatchText.match(/\{[^}]+\}/);
+      if (jsonMatch) {
+        const detected = JSON.parse(jsonMatch[0]);
+        const detectedName = (detected.clientName || '').trim();
+        const detectedDomain = (detected.domain || '').trim();
+
+        // Fuzzy compare: normalise both strings for comparison
+        const normalise = (s: string) =>
+          s.toLowerCase()
+            .replace(/[''`]/g, '')
+            .replace(/[^a-z0-9]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        const nameMatch =
+          !detectedName ||
+          normalise(clientName).includes(normalise(detectedName)) ||
+          normalise(detectedName).includes(normalise(clientName));
+
+        const domainMatch =
+          !detectedDomain ||
+          !clientWebsite ||
+          normalise(clientWebsite).includes(normalise(detectedDomain)) ||
+          normalise(detectedDomain).includes(normalise(clientWebsite));
+
+        const isMismatch = !nameMatch && !domainMatch;
+
+        if (isMismatch && detectedName) {
+          await supabase
+            .from('reports')
+            .update({
+              client_mismatch: true,
+              detected_client_name: detectedName,
+            })
+            .eq('id', reportId);
+        }
+      }
+    } catch (mismatchError) {
+      // Non-critical — don't block report processing
+      console.error('Client mismatch detection failed (non-critical):', mismatchError);
+    }
+
     // Download selected client files (if any)
     const clientFileBlocks: any[] = [];
     const clientFileIds: string[] = report.client_file_ids || [];

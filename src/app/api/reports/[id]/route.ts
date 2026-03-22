@@ -1,6 +1,63 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
 
+// ── PATCH: update report fields (dismiss mismatch, reassign client) ──
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const supabase = await createServerSupabase();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single();
+
+  if (!profile || profile.role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const { id } = await params;
+  const body = await request.json();
+
+  const adminSupabase = createServiceSupabase();
+
+  // Build the update object — only allow specific fields
+  const updates: Record<string, any> = {};
+
+  if (body.dismiss_mismatch) {
+    updates.client_mismatch = false;
+    updates.detected_client_name = null;
+  }
+
+  if (body.client_id) {
+    updates.client_id = body.client_id;
+    updates.client_mismatch = false;
+    updates.detected_client_name = null;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
+  }
+
+  const { error: updateError } = await adminSupabase
+    .from('reports')
+    .update(updates)
+    .eq('id', id);
+
+  if (updateError) {
+    return NextResponse.json({ error: updateError.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
+}
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

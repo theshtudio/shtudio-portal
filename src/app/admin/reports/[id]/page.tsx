@@ -6,6 +6,7 @@ import { ReportActions } from './ReportActions';
 import { ShareLink } from './ShareLink';
 import { CustomInstructions } from './CustomInstructions';
 import { ReportComments } from './ReportComments';
+import { ClientMismatchBanner } from './ClientMismatchBanner';
 import type { ReportCommentWithAuthor } from '@/lib/types';
 import styles from './page.module.css';
 
@@ -44,6 +45,14 @@ export default async function ReportDetailPage({
       <Link href={client ? `/admin/clients/${client.id}` : '/admin'} className={styles.backLink}>
         &larr; Back to {client?.name || 'Dashboard'}
       </Link>
+
+      {report.client_mismatch && report.detected_client_name && (
+        <ClientMismatchBanner
+          reportId={report.id}
+          detectedClientName={report.detected_client_name}
+          currentClientName={client?.name || 'Unknown'}
+        />
+      )}
 
       <div className={styles.header}>
         <div className={styles.headerLeft}>

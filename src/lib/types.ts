@@ -50,6 +50,8 @@ export interface Report {
   custom_instructions: string | null;
   report_type: string | null;
   report_options: Record<string, unknown> | null;
+  client_mismatch: boolean;
+  detected_client_name: string | null;
   is_published: boolean;
   published_at: string | null;
   created_by: string | null;

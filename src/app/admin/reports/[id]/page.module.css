@@ -402,3 +402,60 @@
   justify-content: flex-end;
   margin-top: var(--space-3);
 }
+
+/* ── Client Mismatch Banner ── */
+
+.mismatchBanner {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+  border-left: 4px solid #F59E0B;
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-6);
+}
+
+.mismatchIcon {
+  font-size: 20px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.mismatchContent {
+  flex: 1;
+}
+
+.mismatchText {
+  font-size: var(--text-sm);
+  color: var(--color-dark-600);
+  line-height: 1.6;
+  margin-bottom: var(--space-3);
+}
+
+.mismatchText strong {
+  color: var(--color-dark);
+}
+
+.mismatchActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.mismatchPicker {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.mismatchSelect {
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-family: var(--font-body);
+  color: var(--color-dark);
+  background: white;
+  min-width: 220px;
+}
