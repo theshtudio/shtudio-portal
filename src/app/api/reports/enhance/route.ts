@@ -85,78 +85,6 @@ async function processReport(reportId: string, report: any) {
       return;
     }
 
-    // ── Client mismatch detection ──
-    // Send the first document to Claude for client name extraction
-    try {
-      const clientName = (report.clients as any)?.name || '';
-      const clientWebsite = (report.clients as any)?.website || '';
-      const firstDoc = documentBlocks[0];
-
-      const mismatchRes = await anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 200,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              firstDoc,
-              {
-                type: 'text',
-                text: 'Extract the client name, company name, or website domain mentioned in this report. Return ONLY a JSON object with no other text: { "clientName": "string", "domain": "string" }. If not found, use empty strings.',
-              },
-            ],
-          },
-        ],
-      });
-
-      const mismatchText = mismatchRes.content
-        .filter((b: any) => b.type === 'text')
-        .map((b: any) => b.text)
-        .join('');
-
-      // Try to parse the JSON response
-      const jsonMatch = mismatchText.match(/\{[^}]+\}/);
-      if (jsonMatch) {
-        const detected = JSON.parse(jsonMatch[0]);
-        const detectedName = (detected.clientName || '').trim();
-        const detectedDomain = (detected.domain || '').trim();
-
-        // Fuzzy compare: normalise both strings for comparison
-        const normalise = (s: string) =>
-          s.toLowerCase()
-            .replace(/[''`]/g, '')
-            .replace(/[^a-z0-9]/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-
-        const nameMatch =
-          !detectedName ||
-          normalise(clientName).includes(normalise(detectedName)) ||
-          normalise(detectedName).includes(normalise(clientName));
-
-        const domainMatch =
-          !detectedDomain ||
-          !clientWebsite ||
-          normalise(clientWebsite).includes(normalise(detectedDomain)) ||
-          normalise(detectedDomain).includes(normalise(clientWebsite));
-
-        const isMismatch = !nameMatch && !domainMatch;
-
-        if (isMismatch && detectedName) {
-          await supabase
-            .from('reports')
-            .update({
-              client_mismatch: true,
-              detected_client_name: detectedName,
-            })
-            .eq('id', reportId);
-        }
-      }
-    } catch (mismatchError) {
-      // Non-critical — don't block report processing
-      console.error('Client mismatch detection failed (non-critical):', mismatchError);
-    }
-
     // Download selected client files (if any)
     const clientFileBlocks: any[] = [];
     const clientFileIds: string[] = report.client_file_ids || [];
@@ -259,7 +187,10 @@ Use the .m-change.up / .m-change.down pill styles for positive/negative changes.
       }
     }
 
-    const promptText = `You are a digital marketing report specialist for Shtudio, a Sydney digital agency.
+    const promptText = `IMPORTANT — FIRST LINE INSTRUCTION:
+Before generating the report, extract the client/business name as it appears in the PDF. Output this on the very first line of your response in this exact format: CLIENT_NAME: [name as found in PDF] — then a newline, then the full HTML report. This line will be stripped before display.
+
+You are a digital marketing report specialist for Shtudio, a Sydney digital agency.
 
 Your task is to produce a complete, self-contained HTML file for ${clientName}${periodInfo} that matches the exact design standard of the reference template below. The attached document(s) contain all the raw data and metrics you need — extract everything from them.${reportTypeInstructions}${documentBlocks.length > 1 ? `
 
@@ -917,7 +848,7 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
       ],
     });
 
-    const enhancedHtml = message.content
+    let rawResponse = message.content
       .filter((block) => block.type === 'text')
       .map((block) => {
         if (block.type === 'text') return block.text;
@@ -925,13 +856,44 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
       })
       .join('');
 
-    // Save enhanced HTML and mark as completed
+    // ── Client mismatch detection ──
+    // Parse out CLIENT_NAME: line from the response
+    let detectedClientName: string | null = null;
+    const clientNameLineMatch = rawResponse.match(/^CLIENT_NAME:\s*(.+?)[\r\n]/);
+    if (clientNameLineMatch) {
+      detectedClientName = clientNameLineMatch[1].trim();
+      // Strip the CLIENT_NAME line from the HTML
+      rawResponse = rawResponse.replace(/^CLIENT_NAME:\s*.+?[\r\n]+/, '');
+    }
+
+    const enhancedHtml = rawResponse.trim();
+
+    // Fuzzy name comparison
+    function namesMatch(detected: string, selected: string): boolean {
+      const normalize = (s: string) => s.toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const a = normalize(detected);
+      const b = normalize(selected);
+      return a.includes(b) || b.includes(a) || a === b;
+    }
+
+    // Determine mismatch and update report
+    let clientMismatch = false;
+    if (detectedClientName && clientName) {
+      clientMismatch = !namesMatch(detectedClientName, clientName);
+    }
+
+    // Save enhanced HTML, mismatch info, and mark as completed
     await supabase
       .from('reports')
       .update({
         ai_enhanced_html: enhancedHtml,
         ai_status: 'completed',
         ai_error: null,
+        detected_client_name: detectedClientName,
+        client_mismatch: clientMismatch,
       })
       .eq('id', reportId);
 

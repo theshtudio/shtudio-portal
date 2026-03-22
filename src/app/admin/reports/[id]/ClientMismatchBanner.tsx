@@ -68,9 +68,10 @@ export function ClientMismatchBanner({
       <div className={styles.mismatchIcon}>⚠️</div>
       <div className={styles.mismatchContent}>
         <div className={styles.mismatchText}>
-          <strong>Mismatch detected</strong> — this report appears to be for
-          &ldquo;{detectedClientName}&rdquo; but was uploaded under
-          &ldquo;{currentClientName}&rdquo;. Is this correct?
+          <strong>Client mismatch detected</strong><br />
+          The PDF appears to be for &ldquo;{detectedClientName}&rdquo; but this report
+          is filed under &ldquo;{currentClientName}&rdquo;. Please verify you uploaded
+          the correct file before publishing.
         </div>
 
         {showClientPicker ? (

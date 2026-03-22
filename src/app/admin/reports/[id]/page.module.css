@@ -409,9 +409,8 @@
   display: flex;
   gap: var(--space-3);
   padding: var(--space-4) var(--space-5);
-  background: #FFFBEB;
-  border: 1px solid #FDE68A;
-  border-left: 4px solid #F59E0B;
+  background: #FFF3CD;
+  border: 1px solid #FFEEBA;
   border-radius: var(--radius-lg);
   margin-bottom: var(--space-6);
 }
@@ -428,13 +427,13 @@
 
 .mismatchText {
   font-size: var(--text-sm);
-  color: var(--color-dark-600);
+  color: #856404;
   line-height: 1.6;
   margin-bottom: var(--space-3);
 }
 
 .mismatchText strong {
-  color: var(--color-dark);
+  color: #856404;
 }
 
 .mismatchActions {
