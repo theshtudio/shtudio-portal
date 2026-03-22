@@ -63,15 +63,37 @@ export function ClientMismatchBanner({
 
   if (dismissed) return null;
 
+  // Parse mismatch type from detected_client_name
+  const isTypeMismatch = detectedClientName.startsWith('TYPE_MISMATCH:');
+  const hasBothMismatches = !isTypeMismatch && detectedClientName.includes('(report type:');
+
+  let clientWarning: string | null = null;
+  let typeWarning: string | null = null;
+
+  if (isTypeMismatch) {
+    const parts = detectedClientName.split(':');
+    typeWarning = `This PDF appears to be a ${parts[1]} report but was uploaded as ${parts[2]}.`;
+  } else if (hasBothMismatches) {
+    const nameMatch = detectedClientName.match(/^(.+?)\s*\(report type:\s*(.+?),\s*selected:\s*(.+?)\)$/);
+    if (nameMatch) {
+      clientWarning = `The PDF appears to be for \u201c${nameMatch[1]}\u201d but this report is filed under \u201c${currentClientName}\u201d.`;
+      typeWarning = `This PDF appears to be a ${nameMatch[2]} report but was uploaded as ${nameMatch[3]}.`;
+    } else {
+      clientWarning = `The PDF appears to be for \u201c${detectedClientName}\u201d but this report is filed under \u201c${currentClientName}\u201d.`;
+    }
+  } else {
+    clientWarning = `The PDF appears to be for \u201c${detectedClientName}\u201d but this report is filed under \u201c${currentClientName}\u201d.`;
+  }
+
   return (
     <div className={styles.mismatchBanner}>
-      <div className={styles.mismatchIcon}>⚠️</div>
+      <div className={styles.mismatchIcon}>&#9888;&#65039;</div>
       <div className={styles.mismatchContent}>
         <div className={styles.mismatchText}>
-          <strong>Client mismatch detected</strong><br />
-          The PDF appears to be for &ldquo;{detectedClientName}&rdquo; but this report
-          is filed under &ldquo;{currentClientName}&rdquo;. Please verify you uploaded
-          the correct file before publishing.
+          <strong>Mismatch detected</strong><br />
+          {clientWarning && <>{clientWarning}<br /></>}
+          {typeWarning && <>{typeWarning}<br /></>}
+          Please verify you uploaded the correct file before publishing.
         </div>
 
         {showClientPicker ? (

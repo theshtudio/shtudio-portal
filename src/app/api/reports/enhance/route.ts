@@ -187,8 +187,16 @@ Use the .m-change.up / .m-change.down pill styles for positive/negative changes.
       }
     }
 
-    const promptText = `IMPORTANT — FIRST LINE INSTRUCTION:
-Before generating the report, extract the client/business name as it appears in the PDF. Output this on the very first line of your response in this exact format: CLIENT_NAME: [name as found in PDF] — then a newline, then the full HTML report. This line will be stripped before display.
+    const promptText = `IMPORTANT — FIRST TWO LINES INSTRUCTION (MUST BE FOLLOWED):
+Before generating the report, extract two things from the PDF:
+1. The client/business name as it appears in the PDF
+2. The type of report (one of: Google Ads, SEO, Meta Ads, Microsoft Ads, LinkedIn Ads, Google Business Profile)
+
+Output these on the very first two lines of your response in this exact format:
+CLIENT_NAME: [name as found in PDF]
+REPORT_TYPE: [detected type]
+
+Then a blank line, then the full HTML report. These lines will be stripped before display. You MUST include both lines even if uncertain — use your best guess.
 
 You are a digital marketing report specialist for Shtudio, a Sydney digital agency.
 
@@ -856,14 +864,20 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
       })
       .join('');
 
-    // ── Client mismatch detection ──
-    // Parse out CLIENT_NAME: line from the response
+    // ── Mismatch detection: parse CLIENT_NAME and REPORT_TYPE ──
     let detectedClientName: string | null = null;
-    const clientNameLineMatch = rawResponse.match(/^CLIENT_NAME:\s*(.+?)[\r\n]/);
-    if (clientNameLineMatch) {
-      detectedClientName = clientNameLineMatch[1].trim();
-      // Strip the CLIENT_NAME line from the HTML
-      rawResponse = rawResponse.replace(/^CLIENT_NAME:\s*.+?[\r\n]+/, '');
+    let detectedReportType: string | null = null;
+
+    const clientNameMatch = rawResponse.match(/CLIENT_NAME:\s*(.+)/i);
+    if (clientNameMatch) {
+      detectedClientName = clientNameMatch[1].trim();
+      rawResponse = rawResponse.replace(/CLIENT_NAME:\s*.+[\r\n]*/i, '');
+    }
+
+    const reportTypeMatch = rawResponse.match(/REPORT_TYPE:\s*(.+)/i);
+    if (reportTypeMatch) {
+      detectedReportType = reportTypeMatch[1].trim();
+      rawResponse = rawResponse.replace(/REPORT_TYPE:\s*.+[\r\n]*/i, '');
     }
 
     const enhancedHtml = rawResponse.trim();
@@ -879,11 +893,52 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
       return a.includes(b) || b.includes(a) || a === b;
     }
 
-    // Determine mismatch and update report
-    let clientMismatch = false;
-    if (detectedClientName && clientName) {
-      clientMismatch = !namesMatch(detectedClientName, clientName);
+    // Map report_type keys to display names for comparison
+    const typeDisplayNames: Record<string, string> = {
+      google_ads: 'Google Ads',
+      gbp: 'Google Business Profile',
+      seo: 'SEO',
+      meta_ads: 'Meta Ads',
+      microsoft_ads: 'Microsoft Ads',
+      linkedin_ads: 'LinkedIn Ads',
+      combined: 'Combined Report',
+    };
+    const selectedTypeName = report.report_type ? (typeDisplayNames[report.report_type] || report.report_type) : null;
+
+    // Check for client name mismatch
+    const isClientMismatch = detectedClientName && clientName
+      ? !namesMatch(detectedClientName, clientName)
+      : false;
+
+    // Check for report type mismatch
+    const isTypeMismatch = detectedReportType && selectedTypeName && report.report_type !== 'combined'
+      ? !namesMatch(detectedReportType, selectedTypeName)
+      : false;
+
+    const clientMismatch = isClientMismatch || isTypeMismatch;
+
+    // Build detected_client_name to include both mismatch details
+    let mismatchDescription: string | null = null;
+    if (isClientMismatch && isTypeMismatch) {
+      mismatchDescription = `${detectedClientName} (report type: ${detectedReportType}, selected: ${selectedTypeName})`;
+    } else if (isClientMismatch) {
+      mismatchDescription = detectedClientName;
+    } else if (isTypeMismatch) {
+      mismatchDescription = `TYPE_MISMATCH:${detectedReportType}:${selectedTypeName}`;
     }
+
+    // Debug logging
+    console.log('[Mismatch Detection]', {
+      clientNameLine: clientNameMatch?.[0] || 'NOT FOUND',
+      detectedClientName,
+      selectedClientName: clientName,
+      namesMatchResult: detectedClientName ? namesMatch(detectedClientName, clientName) : 'N/A',
+      reportTypeLine: reportTypeMatch?.[0] || 'NOT FOUND',
+      detectedReportType,
+      selectedReportType: selectedTypeName,
+      typeMatchResult: detectedReportType && selectedTypeName ? namesMatch(detectedReportType, selectedTypeName) : 'N/A',
+      finalMismatch: clientMismatch,
+    });
 
     // Save enhanced HTML, mismatch info, and mark as completed
     await supabase
@@ -892,7 +947,7 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
         ai_enhanced_html: enhancedHtml,
         ai_status: 'completed',
         ai_error: null,
-        detected_client_name: detectedClientName,
+        detected_client_name: mismatchDescription,
         client_mismatch: clientMismatch,
       })
       .eq('id', reportId);
