@@ -50,11 +50,11 @@ async function downloadAsDocBlock(
 
 // ── Background processing function ──
 async function processReport(reportId: string, report: any) {
-  const supabase = createServiceSupabase();
-  const clientName = (report.clients as any)?.name || 'the client';
-  console.log('ENHANCE_ROUTE_STARTED', { reportId, clientName, reportType: report.report_type });
-
   try {
+    const supabase = createServiceSupabase();
+    const clientName = (report.clients as any)?.name || 'the client';
+    console.log('ENHANCE_ROUTE_STARTED', { reportId, clientName, reportType: report.report_type });
+
     // Collect all report document blocks
     const documentBlocks: any[] = [];
 
@@ -986,7 +986,7 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
       console.error('Failed to send report completion email:', emailError);
     }
   } catch (error: any) {
-    console.error('Background report processing error:', error);
+    console.error('PROCESS_REPORT_FATAL_ERROR:', { reportId, error: error?.message, stack: error?.stack });
 
     try {
       const supabase = createServiceSupabase();
@@ -997,8 +997,8 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
           ai_error: error.message || 'An unexpected error occurred during processing',
         })
         .eq('id', reportId);
-    } catch {
-      // Ignore cleanup errors
+    } catch (cleanupErr) {
+      console.error('CLEANUP_ERROR_AFTER_FATAL:', cleanupErr);
     }
   }
 }
@@ -1037,6 +1037,7 @@ export async function POST(request: Request) {
       .eq('id', reportId);
 
     // Run the heavy processing in the background after the response is sent
+    console.log('CALLING_WAIT_UNTIL', { reportId });
     waitUntil(processReport(reportId, report));
 
     // Return immediately
