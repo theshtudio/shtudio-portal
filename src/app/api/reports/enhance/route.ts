@@ -51,6 +51,8 @@ async function downloadAsDocBlock(
 // ── Background processing function ──
 async function processReport(reportId: string, report: any) {
   const supabase = createServiceSupabase();
+  const clientName = (report.clients as any)?.name || 'the client';
+  console.log('ENHANCE_ROUTE_STARTED', { reportId, clientName, reportType: report.report_type });
 
   try {
     // Collect all report document blocks
@@ -116,7 +118,6 @@ async function processReport(reportId: string, report: any) {
       .limit(6);
 
     // Build prompt context
-    const clientName = (report.clients as any)?.name || 'the client';
     const clientLogoUrl = (report.clients as any)?.logo_url || '';
     const periodInfo = report.period_start && report.period_end
       ? ` for the period ${report.period_start} to ${report.period_end}`
@@ -859,85 +860,94 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
       })
       .join('');
 
-    // ── Mismatch detection: parse CLIENT_NAME and REPORT_TYPE ──
+    // ── Mismatch detection (non-fatal — wrapped in try/catch) ──
     console.log('RAW_RESPONSE_START:', rawResponse.substring(0, 500));
 
-    let detectedClientName: string | null = null;
-    let detectedReportType: string | null = null;
+    let mismatchDescription: string | null = null;
+    let clientMismatch = false;
 
-    const clientNameMatch = rawResponse.match(/CLIENT_NAME:\s*(.+)/i);
-    console.log('CLIENT_NAME_MATCH:', clientNameMatch);
-    if (clientNameMatch) {
-      detectedClientName = clientNameMatch[1].trim();
-      rawResponse = rawResponse.replace(/CLIENT_NAME:\s*.+[\r\n]*/i, '');
-    }
+    try {
+      let detectedClientName: string | null = null;
+      let detectedReportType: string | null = null;
 
-    const reportTypeMatch = rawResponse.match(/REPORT_TYPE:\s*(.+)/i);
-    console.log('REPORT_TYPE_MATCH:', reportTypeMatch);
-    if (reportTypeMatch) {
-      detectedReportType = reportTypeMatch[1].trim();
-      rawResponse = rawResponse.replace(/REPORT_TYPE:\s*.+[\r\n]*/i, '');
+      const clientNameMatch = rawResponse.match(/CLIENT_NAME:\s*(.+)/i);
+      console.log('CLIENT_NAME_MATCH:', clientNameMatch);
+      if (clientNameMatch) {
+        detectedClientName = clientNameMatch[1].trim();
+        rawResponse = rawResponse.replace(/CLIENT_NAME:\s*.+[\r\n]*/i, '');
+      }
+
+      const reportTypeMatch = rawResponse.match(/REPORT_TYPE:\s*(.+)/i);
+      console.log('REPORT_TYPE_MATCH:', reportTypeMatch);
+      if (reportTypeMatch) {
+        detectedReportType = reportTypeMatch[1].trim();
+        rawResponse = rawResponse.replace(/REPORT_TYPE:\s*.+[\r\n]*/i, '');
+      }
+
+      // Fuzzy name comparison
+      function namesMatch(detected: string, selected: string): boolean {
+        const normalize = (s: string) => s.toLowerCase()
+          .replace(/[^a-z0-9\s]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        const a = normalize(detected);
+        const b = normalize(selected);
+        return a.includes(b) || b.includes(a) || a === b;
+      }
+
+      // Map report_type keys to display names for comparison
+      const typeDisplayNames: Record<string, string> = {
+        google_ads: 'Google Ads',
+        gbp: 'Google Business Profile',
+        seo: 'SEO',
+        meta_ads: 'Meta Ads',
+        microsoft_ads: 'Microsoft Ads',
+        linkedin_ads: 'LinkedIn Ads',
+        combined: 'Combined Report',
+      };
+      const selectedTypeName = report.report_type ? (typeDisplayNames[report.report_type] || report.report_type) : null;
+
+      // Check for client name mismatch
+      const isClientMismatch = detectedClientName && clientName
+        ? !namesMatch(detectedClientName, clientName)
+        : false;
+
+      // Check for report type mismatch
+      const isTypeMismatch = detectedReportType && selectedTypeName && report.report_type !== 'combined'
+        ? !namesMatch(detectedReportType, selectedTypeName)
+        : false;
+
+      clientMismatch = !!(isClientMismatch || isTypeMismatch);
+
+      // Build detected_client_name to include both mismatch details
+      if (isClientMismatch && isTypeMismatch) {
+        mismatchDescription = `${detectedClientName} (report type: ${detectedReportType}, selected: ${selectedTypeName})`;
+      } else if (isClientMismatch) {
+        mismatchDescription = detectedClientName;
+      } else if (isTypeMismatch) {
+        mismatchDescription = `TYPE_MISMATCH:${detectedReportType}:${selectedTypeName}`;
+      }
+
+      // Debug logging
+      console.log('[Mismatch Detection]', {
+        clientNameLine: clientNameMatch?.[0] || 'NOT FOUND',
+        detectedClientName,
+        selectedClientName: clientName,
+        namesMatchResult: detectedClientName ? namesMatch(detectedClientName, clientName) : 'N/A',
+        reportTypeLine: reportTypeMatch?.[0] || 'NOT FOUND',
+        detectedReportType,
+        selectedReportType: selectedTypeName,
+        typeMatchResult: detectedReportType && selectedTypeName ? namesMatch(detectedReportType, selectedTypeName) : 'N/A',
+        finalMismatch: clientMismatch,
+      });
+    } catch (mismatchErr) {
+      console.error('Mismatch detection failed (non-fatal):', mismatchErr);
+      // Reset to safe defaults — report will still save
+      mismatchDescription = null;
+      clientMismatch = false;
     }
 
     const enhancedHtml = rawResponse.trim();
-
-    // Fuzzy name comparison
-    function namesMatch(detected: string, selected: string): boolean {
-      const normalize = (s: string) => s.toLowerCase()
-        .replace(/[^a-z0-9\s]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-      const a = normalize(detected);
-      const b = normalize(selected);
-      return a.includes(b) || b.includes(a) || a === b;
-    }
-
-    // Map report_type keys to display names for comparison
-    const typeDisplayNames: Record<string, string> = {
-      google_ads: 'Google Ads',
-      gbp: 'Google Business Profile',
-      seo: 'SEO',
-      meta_ads: 'Meta Ads',
-      microsoft_ads: 'Microsoft Ads',
-      linkedin_ads: 'LinkedIn Ads',
-      combined: 'Combined Report',
-    };
-    const selectedTypeName = report.report_type ? (typeDisplayNames[report.report_type] || report.report_type) : null;
-
-    // Check for client name mismatch
-    const isClientMismatch = detectedClientName && clientName
-      ? !namesMatch(detectedClientName, clientName)
-      : false;
-
-    // Check for report type mismatch
-    const isTypeMismatch = detectedReportType && selectedTypeName && report.report_type !== 'combined'
-      ? !namesMatch(detectedReportType, selectedTypeName)
-      : false;
-
-    const clientMismatch = isClientMismatch || isTypeMismatch;
-
-    // Build detected_client_name to include both mismatch details
-    let mismatchDescription: string | null = null;
-    if (isClientMismatch && isTypeMismatch) {
-      mismatchDescription = `${detectedClientName} (report type: ${detectedReportType}, selected: ${selectedTypeName})`;
-    } else if (isClientMismatch) {
-      mismatchDescription = detectedClientName;
-    } else if (isTypeMismatch) {
-      mismatchDescription = `TYPE_MISMATCH:${detectedReportType}:${selectedTypeName}`;
-    }
-
-    // Debug logging
-    console.log('[Mismatch Detection]', {
-      clientNameLine: clientNameMatch?.[0] || 'NOT FOUND',
-      detectedClientName,
-      selectedClientName: clientName,
-      namesMatchResult: detectedClientName ? namesMatch(detectedClientName, clientName) : 'N/A',
-      reportTypeLine: reportTypeMatch?.[0] || 'NOT FOUND',
-      detectedReportType,
-      selectedReportType: selectedTypeName,
-      typeMatchResult: detectedReportType && selectedTypeName ? namesMatch(detectedReportType, selectedTypeName) : 'N/A',
-      finalMismatch: clientMismatch,
-    });
 
     // Save enhanced HTML, mismatch info, and mark as completed
     await supabase
