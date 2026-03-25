@@ -78,7 +78,7 @@ async function main() {
   console.log('\n📋  Step 0 — Creating temporary test document…');
   const { data: testDoc, error: docError } = await supabase
     .from('kb_documents')
-    .insert({ title: '[test-kb-embed script]', status: 'processing', access_tier: 'admin' })
+    .insert({ title: '[test-kb-embed script]', status: 'processing', access_tier: 'admin', file_type: 'txt' })
     .select('id')
     .single();
   if (docError || !testDoc) {
