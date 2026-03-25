@@ -38,18 +38,17 @@ async function processDocument(
     await supabase
       .from('kb_chunks')
       .delete()
-      .eq('source_type', 'kb_document')
-      .eq('source_ref', docId);
+      .eq('document_id', docId);
 
     // 4. Insert all new chunks
     const rows = chunks.map((chunk, i) => ({
+      document_id: docId,
       content:     chunk.content,
       embedding:   formatVector(allEmbeddings[i]),
-      source_type: 'kb_document',
-      source_ref:  docId,
       chunk_index: chunk.index,
+      access_tier: accessTier,
       token_count: chunk.tokenCount,
-      metadata:    { access_tier: accessTier, file_name: fileName },
+      metadata:    { file_name: fileName },
     }));
 
     const { error: insertError } = await supabase.from('kb_chunks').insert(rows);

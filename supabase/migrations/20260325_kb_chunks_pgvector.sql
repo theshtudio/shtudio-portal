@@ -12,15 +12,18 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE TABLE IF NOT EXISTS public.kb_chunks (
   id            uuid        PRIMARY KEY DEFAULT uuid_generate_v4(),
+  -- FK to the parent document record
+  document_id   uuid        REFERENCES public.kb_documents(id) ON DELETE CASCADE,
   -- The raw text of this chunk
   content       text        NOT NULL,
   -- text-embedding-ada-002 produces 1536-dimensional vectors
   embedding     vector(1536),
-  -- Where this chunk came from
-  source_type   text,       -- 'manual' | 'url' | 'file' | 'report'
-  source_ref    text,       -- URL, filename, report id, etc.
-  chunk_index   integer,    -- position within the source document
-  token_count   integer,    -- approximate token count
+  -- Position within the source document
+  chunk_index   integer,
+  -- Mirrors kb_documents.access_tier for efficient retrieval filtering
+  access_tier   text        NOT NULL DEFAULT 'general',
+  -- Approximate token count
+  token_count   integer,
   metadata      jsonb       NOT NULL DEFAULT '{}'::jsonb,
   created_at    timestamptz NOT NULL DEFAULT now()
 );
@@ -36,8 +39,8 @@ CREATE INDEX IF NOT EXISTS kb_chunks_embedding_idx
   USING ivfflat (embedding vector_cosine_ops)
   WITH (lists = 100);
 
-CREATE INDEX IF NOT EXISTS kb_chunks_source_idx
-  ON public.kb_chunks (source_type, source_ref);
+CREATE INDEX IF NOT EXISTS kb_chunks_document_idx  ON public.kb_chunks (document_id);
+CREATE INDEX IF NOT EXISTS kb_chunks_tier_idx      ON public.kb_chunks (access_tier);
 
 -- ============================================================
 -- RLS: only service-role / admins may read or write
@@ -62,10 +65,10 @@ CREATE OR REPLACE FUNCTION match_kb_chunks(
 )
 RETURNS TABLE (
   id           uuid,
+  document_id  uuid,
   content      text,
-  source_type  text,
-  source_ref   text,
   chunk_index  integer,
+  access_tier  text,
   metadata     jsonb,
   similarity   float
 )
@@ -73,10 +76,10 @@ LANGUAGE sql STABLE
 AS $$
   SELECT
     id,
+    document_id,
     content,
-    source_type,
-    source_ref,
     chunk_index,
+    access_tier,
     metadata,
     1 - (embedding <=> query_embedding) AS similarity
   FROM public.kb_chunks

@@ -74,8 +74,22 @@ ask questions, and track your campaign performance over time.
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
+  // Step 0 — create a temporary kb_documents row so we have a valid document_id FK
+  console.log('\n📋  Step 0 — Creating temporary test document…');
+  const { data: testDoc, error: docError } = await supabase
+    .from('kb_documents')
+    .insert({ title: '[test-kb-embed script]', status: 'processing', access_tier: 'admin' })
+    .select('id')
+    .single();
+  if (docError || !testDoc) {
+    console.error('❌  Failed to create test document:', docError?.message);
+    process.exit(1);
+  }
+  const testDocId = testDoc.id as string;
+  console.log(`   → document id: ${testDocId}`);
+
   console.log('\n🧩  Step 1 — Chunking sample text…');
-  const chunks = chunkText(SAMPLE_TEXT, 100, 15); // small words for this short sample
+  const chunks = chunkText(SAMPLE_TEXT, 100, 15); // small target for this short sample
   console.log(`   → ${chunks.length} chunk(s) produced`);
   chunks.forEach((c, i) =>
     console.log(`   Chunk ${i}: ${c.tokenCount} approx tokens — "${c.content.slice(0, 60)}…"`),
@@ -87,11 +101,11 @@ async function main() {
 
   console.log('\n💾  Step 3 — Inserting into kb_chunks…');
   const rows = chunks.map((chunk, i) => ({
+    document_id: testDocId,
     content:     chunk.content,
     embedding:   formatVector(embeddings[i]),
-    source_type: 'test',
-    source_ref:  'scripts/test-kb-embed.ts',
     chunk_index: chunk.index,
+    access_tier: 'admin',
     token_count: chunk.tokenCount,
     metadata:    { test: true, run: new Date().toISOString() },
   }));
@@ -103,6 +117,8 @@ async function main() {
 
   if (insertError) {
     console.error('❌  Insert failed:', insertError.message);
+    // Clean up the test document before exiting
+    await supabase.from('kb_documents').delete().eq('id', testDocId);
     process.exit(1);
   }
   const insertedIds = inserted!.map((r: { id: string }) => r.id);
@@ -129,14 +145,24 @@ async function main() {
   }
 
   console.log('\n🧹  Step 5 — Cleaning up test rows…');
-  const { error: delError } = await supabase
+  const { error: delChunksError } = await supabase
     .from('kb_chunks')
     .delete()
     .in('id', insertedIds);
-  if (delError) {
-    console.warn('   ⚠️  Cleanup failed (rows left in db):', delError.message);
+  if (delChunksError) {
+    console.warn('   ⚠️  Chunk cleanup failed:', delChunksError.message);
   } else {
-    console.log(`   → Deleted ${insertedIds.length} test row(s)`);
+    console.log(`   → Deleted ${insertedIds.length} chunk row(s)`);
+  }
+
+  const { error: delDocError } = await supabase
+    .from('kb_documents')
+    .delete()
+    .eq('id', testDocId);
+  if (delDocError) {
+    console.warn('   ⚠️  Document cleanup failed:', delDocError.message);
+  } else {
+    console.log(`   → Deleted test document`);
   }
 
   console.log('\n✅  All steps completed — pgvector pipeline is working!\n');
