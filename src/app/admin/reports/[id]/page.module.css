@@ -459,6 +459,215 @@
   min-width: 220px;
 }
 
+/* ── Editable Title ── */
+
+.editableTitleWrapper {
+  position: relative;
+  margin-bottom: var(--space-2);
+}
+
+.titleDisplayRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.titleEditRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.titleInput {
+  font-family: var(--font-heading);
+  font-size: var(--text-3xl);
+  text-transform: uppercase;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid var(--color-primary);
+  outline: none;
+  color: var(--color-dark);
+  padding: 0 0 2px;
+  min-width: 240px;
+  max-width: 100%;
+  line-height: 1.2;
+}
+
+.editIconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-dark-300);
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+  transition: color var(--transition-fast), background var(--transition-fast);
+  margin-top: 2px;
+}
+
+.editIconBtn:hover {
+  color: var(--color-primary);
+  background: var(--color-dark-50);
+}
+
+.titleSaveBtn {
+  padding: 4px 12px;
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-family: var(--font-body);
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.titleSaveBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.titleCancelBtn {
+  padding: 4px 12px;
+  background: transparent;
+  color: var(--color-dark-400);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.titleCancelBtn:hover {
+  background: var(--color-dark-50);
+}
+
+.titleToast {
+  position: fixed;
+  bottom: var(--space-6);
+  right: var(--space-6);
+  background: var(--color-dark);
+  color: var(--color-white);
+  font-size: var(--text-sm);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 1000;
+  animation: fadeInUp 0.2s ease;
+}
+
+/* ── Report Details Card ── */
+
+.detailsSection {
+  margin-bottom: var(--space-8);
+}
+
+.detailsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.detailsEditBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--color-dark-400);
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 4px 10px;
+  cursor: pointer;
+  font-family: var(--font-body);
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.detailsEditBtn:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.detailsCard {
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5) var(--space-6);
+}
+
+.detailsFieldGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-5);
+}
+
+.detailsField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.detailsLabel {
+  font-size: var(--text-xs);
+  color: var(--color-dark-400);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 500;
+}
+
+.detailsValue {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-dark);
+}
+
+.detailsInput {
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-family: var(--font-body);
+  color: var(--color-dark);
+  background: var(--color-white);
+}
+
+.detailsInput:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+.detailsSelect {
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-family: var(--font-body);
+  color: var(--color-dark);
+  background: var(--color-white);
+}
+
+.detailsSelect:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+.detailsActions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
 /* ── Processing Progress Bar ── */
 
 .progressWrapper {

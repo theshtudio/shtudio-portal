@@ -42,6 +42,22 @@ export async function PATCH(
     updates.detected_client_name = null;
   }
 
+  if (typeof body.title === 'string' && body.title.trim()) {
+    updates.title = body.title.trim();
+  }
+
+  if (typeof body.report_type !== 'undefined') {
+    updates.report_type = body.report_type;
+  }
+
+  if (typeof body.period_start !== 'undefined') {
+    updates.period_start = body.period_start;
+  }
+
+  if (typeof body.period_end !== 'undefined') {
+    updates.period_end = body.period_end;
+  }
+
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
   }

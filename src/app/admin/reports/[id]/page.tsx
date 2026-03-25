@@ -8,6 +8,8 @@ import { CustomInstructions } from './CustomInstructions';
 import { ReportComments } from './ReportComments';
 import { ClientMismatchBanner } from './ClientMismatchBanner';
 import { ProcessingProgress } from './ProcessingProgress';
+import { EditableTitle } from './EditableTitle';
+import { ReportDetailsCard } from './ReportDetailsCard';
 import type { ReportCommentWithAuthor } from '@/lib/types';
 import styles from './page.module.css';
 
@@ -31,8 +33,15 @@ export default async function ReportDetailPage({
 
   const client = report.clients as any;
 
-  // Fetch comments (using service role to bypass RLS for admin view)
+  // Fetch all clients for the reassignment dropdown
   const serviceSupabase = createServiceSupabase();
+  const { data: allClients } = await serviceSupabase
+    .from('clients')
+    .select('id, name')
+    .eq('is_active', true)
+    .order('name');
+
+  // Fetch comments (using service role to bypass RLS for admin view)
   const { data: comments } = await serviceSupabase
     .from('report_comments')
     .select('*, profiles(full_name, email)')
@@ -57,7 +66,7 @@ export default async function ReportDetailPage({
 
       <div className={styles.header}>
         <div className={styles.headerLeft}>
-          <h1 className={styles.heading}>{report.title}</h1>
+          <EditableTitle reportId={report.id} initialTitle={report.title} />
           <div className={styles.clientName}>{client?.name}</div>
         </div>
         <div className={styles.headerActions}>
@@ -118,6 +127,16 @@ export default async function ReportDetailPage({
           </div>
         </div>
       </div>
+
+      {/* Report Details — editable card */}
+      <ReportDetailsCard
+        reportId={report.id}
+        initialPeriodStart={report.period_start ?? null}
+        initialPeriodEnd={report.period_end ?? null}
+        initialClientId={client?.id ?? ''}
+        initialReportType={report.report_type ?? null}
+        allClients={allClients ?? []}
+      />
 
       {/* Custom Instructions */}
       <CustomInstructions reportId={report.id} initialValue={report.custom_instructions || ''} />
