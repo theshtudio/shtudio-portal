@@ -77,13 +77,11 @@ export function KbDocumentList({ documents }: KbDocumentListProps) {
             const { badge, label } = statusToBadge(doc.status);
             const isDeleting = deletingId === doc.id;
             return (
-              <tr key={doc.id} className={styles.tr}>
+              <tr key={doc.id} className={`${styles.tr}${doc.status === 'processing' ? ` ${styles.trProcessing}` : ''}`}>
                 <td className={styles.td}>
                   <span className={styles.docTitle}>{doc.title}</span>
                   {doc.status === 'failed' && doc.error && (
-                    <span className={styles.docError} title={doc.error}>
-                      {' '}— {doc.error.slice(0, 60)}{doc.error.length > 60 ? '…' : ''}
-                    </span>
+                    <span className={styles.docError} title={doc.error}>{doc.error}</span>
                   )}
                 </td>
                 <td className={styles.td}>
