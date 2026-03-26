@@ -8,13 +8,17 @@ const MAX_TOKENS   = 8_000;
 // Approximate characters that correspond to MAX_TOKENS (1 token ≈ 4 chars)
 const MAX_CHARS    = MAX_TOKENS * 4; // 32 000
 
-// Max texts per single embeddings API call — keeps payloads small and
-// avoids triggering per-request token-count limits on large documents
-const BATCH_SIZE   = 10;
+// Chunks sent per embeddings API call.
+// Set to 1 (one chunk per call) to be maximally conservative on rate limits.
+// text-embedding-ada-002 Tier 1 allows 500 RPM so batches of 10 would also
+// be safe, but 1 eliminates any per-request token-count ambiguity entirely.
+const BATCH_SIZE   = 1;
 
-// Pause between consecutive embedding API calls to stay under OpenAI's
-// rate limits (requests-per-minute on the embeddings endpoint).
-const INTER_BATCH_DELAY_MS = 1_000;
+// Pause between consecutive embedding API calls.
+// 2 000 ms → ~30 RPM ceiling, well within Tier 1's 500 RPM limit.
+// Increase to 5 000 ms (5 s) if you're seeing 429 rate-limit errors,
+// or check your tier at https://platform.openai.com/account/limits
+const INTER_BATCH_DELAY_MS = 2_000;
 
 let _client: OpenAI | null = null;
 function getClient(): OpenAI {

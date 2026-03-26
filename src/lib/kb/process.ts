@@ -9,7 +9,8 @@
  *   1. Fetch document metadata (access_tier, file_name) from kb_documents
  *   2. Translate to English if the text is not already English
  *   3. Chunk the translated text (~300 words per chunk, 30-word overlap)
- *   4. Embed all chunks via OpenAI text-embedding-ada-002 (batches of 10)
+ *   4. Embed all chunks via OpenAI text-embedding-ada-002 (1 chunk per call,
+ *      2 000 ms delay between calls — see embed.ts for tuning constants)
  *   5. Delete any previous chunks for this document (idempotent)
  *   6. Insert the new chunks into kb_chunks
  *   7. Mark the document status → 'ready'
