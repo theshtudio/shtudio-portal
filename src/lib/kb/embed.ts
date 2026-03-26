@@ -12,13 +12,13 @@ const MAX_CHARS    = MAX_TOKENS * 4; // 32 000
 // Set to 1 (one chunk per call) to be maximally conservative on rate limits.
 // text-embedding-ada-002 Tier 1 allows 500 RPM so batches of 10 would also
 // be safe, but 1 eliminates any per-request token-count ambiguity entirely.
-const BATCH_SIZE   = 1;
+const BATCH_SIZE   = 10;
 
 // Pause between consecutive embedding API calls.
-// 2 000 ms → ~30 RPM ceiling, well within Tier 1's 500 RPM limit.
-// Increase to 5 000 ms (5 s) if you're seeing 429 rate-limit errors,
+// 200 ms → ~300 RPM ceiling, well within Tier 1's 500 RPM limit.
+// Increase to 2 000 ms (2 s) if you're seeing 429 rate-limit errors,
 // or check your tier at https://platform.openai.com/account/limits
-const INTER_BATCH_DELAY_MS = 2_000;
+const INTER_BATCH_DELAY_MS = 200;
 
 let _client: OpenAI | null = null;
 function getClient(): OpenAI {

@@ -92,10 +92,13 @@ export async function translateToEnglish(text: string): Promise<string> {
   const segments: string[] = [];
 
   for (let i = 0; i < words.length; i += SEGMENT_WORDS) {
+    const segNum  = Math.floor(i / SEGMENT_WORDS) + 1;
+    const total   = Math.ceil(words.length / SEGMENT_WORDS);
+    console.log('KB_TRANSLATE_SEGMENT_START', { segment: segNum, of: total, wordOffset: i });
     const segment    = words.slice(i, i + SEGMENT_WORDS).join(' ');
     const translated = await translateSegment(segment);
     segments.push(translated);
-    console.log('KB_TRANSLATE_SEGMENT', { segment: segments.length, words: Math.min(i + SEGMENT_WORDS, words.length) });
+    console.log('KB_TRANSLATE_SEGMENT_DONE', { segment: segNum, of: total, words: Math.min(i + SEGMENT_WORDS, words.length) });
   }
 
   const result = segments.join('\n\n');
