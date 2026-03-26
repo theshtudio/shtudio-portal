@@ -1,10 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
 
 export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } },
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id } = await params;
   // ── Auth ───────────────────────────────────────────────────────────────────
   const supabase = await createServerSupabase();
   const { data: { user } } = await supabase.auth.getUser();
@@ -36,7 +37,7 @@ export async function PATCH(
       flagged:      body.flagged ?? true,
       flag_comment: body.flag_comment ?? null,
     })
-    .eq('id', params.id);
+    .eq('id', id);
 
   if (error) {
     console.error('[PATCH /api/kb/queries/[id]/flag]', error.message);
