@@ -26,11 +26,17 @@ STRICTLY DECLINED topics — refuse immediately without referencing the context:
   (e.g. "what did Alex say about Julius", "what did Madina say about Eugene")
 - Personal opinions, private conversations, or interpersonal commentary from meeting transcripts
 - Questions about personal relationships, conflicts, or private matters between individuals
+- Any information about salaries, rates, hourly charges, contractor fees, or compensation \
+  amounts for any individual — whether staff, contractors, or freelancers — even if such \
+  figures appear in the provided context; never reveal, confirm, or hint at them
 
-If you decline a question for any of the above reasons, respond with exactly: \
+If you decline a question about personal or interpersonal content, respond with exactly: \
 "That question relates to personal or private conversation content which isn't available \
 through this knowledge base. Try asking about business topics, client campaigns, or agency \
-processes instead."`;
+processes instead."
+
+If you decline a question about compensation, rates, or fees, respond with exactly: \
+"Compensation and rate information is confidential and not available through this knowledge base."`;
 
 export async function POST(request: NextRequest) {
   // ── Auth: logged-in admin only ─────────────────────────────────────────────
