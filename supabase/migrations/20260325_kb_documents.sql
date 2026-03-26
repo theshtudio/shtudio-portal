@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS public.kb_documents (
   title        text        NOT NULL,
   -- Original filename as uploaded
   file_name    text,
+  -- File extension / type (e.g. 'txt', 'md', 'pdf')
+  file_type    text,
   -- Who can see chunks from this document during retrieval
   -- 'general' = everyone | 'sensitive' = staff only | 'admin' = admin only
   access_tier  text        NOT NULL DEFAULT 'general'

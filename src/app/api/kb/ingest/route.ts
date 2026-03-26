@@ -137,6 +137,7 @@ export async function POST(request: NextRequest) {
     .insert({
       title,
       file_name:   file.name,
+      file_type:   ext,
       access_tier: accessTier,
       category,
       status:      'processing',
