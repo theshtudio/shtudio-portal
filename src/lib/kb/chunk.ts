@@ -14,49 +14,37 @@ function approxTokens(text: string): number {
  * Split `text` into overlapping word-based chunks.
  *
  * @param text        The source text to chunk.
- * @param targetWords Target words per chunk (default 500 ≈ ~380 tokens, well under ada-002's 8191 limit).
- * @param overlapWords Words of overlap between consecutive chunks (default 50).
+ * @param targetWords Target words per chunk (default 300 ≈ ~230 tokens, comfortably under ada-002's 8191 limit).
+ * @param overlapWords Words of overlap between consecutive chunks (default 30).
  * @returns           Array of Chunk objects in document order.
  */
 export function chunkText(
   text: string,
-  targetWords = 500,
-  overlapWords = 50,
+  targetWords = 300,
+  overlapWords = 30,
 ): Chunk[] {
-  // Normalise whitespace but preserve paragraph structure for splitting
-  const paragraphs = text
-    .trim()
-    .split(/\n{2,}/)
-    .map((p) => p.replace(/\s+/g, ' ').trim())
-    .filter(Boolean);
+  // Split on any whitespace run so even documents with no blank lines get word-level splitting
+  const words = text.trim().split(/\s+/).filter(Boolean);
+
+  if (words.length === 0) return [];
 
   const chunks: Chunk[] = [];
-  let buffer: string[] = [];
+  let start = 0;
 
-  function flush(isLast: boolean) {
-    if (buffer.length === 0) return;
-    const content = buffer.join(' ');
+  while (start < words.length) {
+    const end     = Math.min(start + targetWords, words.length);
+    const content = words.slice(start, end).join(' ');
+
     chunks.push({
       content,
-      index: chunks.length,
+      index:      chunks.length,
       tokenCount: approxTokens(content),
     });
-    // Keep overlap words for the next chunk
-    buffer = isLast ? [] : buffer.slice(-overlapWords);
+
+    // Advance by (targetWords - overlapWords) so consecutive chunks share overlap
+    const advance = targetWords - overlapWords;
+    start += advance > 0 ? advance : targetWords; // guard against zero/negative advance
   }
-
-  for (const paragraph of paragraphs) {
-    const words = paragraph.split(' ');
-    buffer.push(...words);
-
-    // Flush whenever we've accumulated enough words
-    while (buffer.length >= targetWords) {
-      flush(false);
-    }
-  }
-
-  // Flush whatever's left
-  if (buffer.length > 0) flush(true);
 
   return chunks;
 }
@@ -67,8 +55,8 @@ export function chunkText(
  */
 export function chunkSections(
   sections: Array<{ content: string; sourceRef?: string }>,
-  targetWords = 500,
-  overlapWords = 50,
+  targetWords = 300,
+  overlapWords = 30,
 ): Array<Chunk & { sourceRef?: string }> {
   return sections.flatMap(({ content, sourceRef }) =>
     chunkText(content, targetWords, overlapWords).map((c) => ({

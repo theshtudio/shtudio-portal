@@ -1,7 +1,16 @@
 import OpenAI from 'openai';
 
-// text-embedding-ada-002: 1536 dimensions, max 8191 tokens per call
+// text-embedding-ada-002: 1536 dimensions, max 8191 tokens per input
 const MODEL = 'text-embedding-ada-002';
+
+// Hard safety margin — leave 191 tokens of headroom below the 8191 limit
+const MAX_TOKENS   = 8_000;
+// Approximate characters that correspond to MAX_TOKENS (1 token ≈ 4 chars)
+const MAX_CHARS    = MAX_TOKENS * 4; // 32 000
+
+// Max texts per single embeddings API call — keeps payloads small and
+// avoids triggering per-request token-count limits on large documents
+const BATCH_SIZE   = 10;
 
 let _client: OpenAI | null = null;
 function getClient(): OpenAI {
@@ -15,31 +24,60 @@ function getClient(): OpenAI {
 }
 
 /**
+ * Normalise and hard-truncate a string so it never exceeds MAX_CHARS
+ * (≈ MAX_TOKENS tokens for ada-002).  Truncation at a character boundary
+ * is safe: ada-002 is byte-pair encoded so a partial word near the end
+ * won't cause an error, it just drops a few trailing bytes.
+ */
+function prepareText(text: string): string {
+  const normalised = text.replace(/\n+/g, ' ').trim();
+  return normalised.length > MAX_CHARS ? normalised.slice(0, MAX_CHARS) : normalised;
+}
+
+/**
  * Embed a single string.
  * Returns a 1536-dimensional float array.
  */
 export async function embedText(text: string): Promise<number[]> {
   const response = await getClient().embeddings.create({
     model: MODEL,
-    input: text.replace(/\n+/g, ' '), // newlines degrade quality
+    input: prepareText(text),
   });
   return response.data[0].embedding;
 }
 
 /**
- * Embed a batch of strings in one API call (max ~2048 inputs per request).
+ * Embed an array of strings, processing them in sequential sub-batches of
+ * BATCH_SIZE to stay well within per-request token budgets and rate limits.
+ *
+ * Each text is normalised (newlines → spaces) and hard-truncated to MAX_CHARS
+ * before it is sent, so no single input can ever trip the 8191-token limit.
+ *
  * Returns embeddings in the same order as the input array.
  */
 export async function embedBatch(texts: string[]): Promise<number[][]> {
   if (texts.length === 0) return [];
-  const response = await getClient().embeddings.create({
-    model: MODEL,
-    input: texts.map((t) => t.replace(/\n+/g, ' ')),
-  });
-  // API returns results sorted by index, but let's be safe
-  return response.data
-    .sort((a, b) => a.index - b.index)
-    .map((d) => d.embedding);
+
+  const prepared = texts.map(prepareText);
+  const results: number[][] = new Array(prepared.length);
+
+  for (let i = 0; i < prepared.length; i += BATCH_SIZE) {
+    const slice    = prepared.slice(i, i + BATCH_SIZE);
+    const response = await getClient().embeddings.create({
+      model: MODEL,
+      input: slice,
+    });
+
+    // API returns items sorted by index (relative to this sub-batch call),
+    // but sort defensively to be safe.
+    response.data
+      .sort((a, b) => a.index - b.index)
+      .forEach((item, j) => {
+        results[i + j] = item.embedding;
+      });
+  }
+
+  return results;
 }
 
 /**

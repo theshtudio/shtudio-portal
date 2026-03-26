@@ -1,76 +1,11 @@
 export const maxDuration = 300;
 
-import { waitUntil } from '@vercel/functions';
+import { waitUntil }    from '@vercel/functions';
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
-import { chunkText } from '@/lib/kb/chunk';
-import { embedBatch, formatVector } from '@/lib/kb/embed';
+import { processDocument } from '@/lib/kb/process';
 
-// ── Background processing ────────────────────────────────────────────────────
-
-async function processDocument(
-  docId: string,
-  rawText: string,
-  accessTier: string,
-  fileName: string,
-) {
-  const supabase = createServiceSupabase();
-  try {
-    console.log('KB_INGEST_START', { docId, fileName, chars: rawText.length });
-
-    // 1. Chunk the text
-    const chunks = chunkText(rawText);
-    if (chunks.length === 0) throw new Error('Text produced zero chunks after chunking');
-
-    console.log('KB_INGEST_CHUNKED', { docId, chunks: chunks.length });
-
-    // 2. Embed in batches of 100 (well under the OpenAI limit)
-    const BATCH_SIZE = 100;
-    const allEmbeddings: number[][] = [];
-    for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
-      const batch = chunks.slice(i, i + BATCH_SIZE);
-      const embeddings = await embedBatch(batch.map((c) => c.content));
-      allEmbeddings.push(...embeddings);
-      console.log('KB_INGEST_EMBEDDED_BATCH', { docId, upTo: i + batch.length });
-    }
-
-    // 3. Remove any previously ingested chunks for this document (idempotent re-run)
-    await supabase
-      .from('kb_chunks')
-      .delete()
-      .eq('document_id', docId);
-
-    // 4. Insert all new chunks
-    const rows = chunks.map((chunk, i) => ({
-      document_id: docId,
-      content:     chunk.content,
-      embedding:   formatVector(allEmbeddings[i]),
-      chunk_index: chunk.index,
-      access_tier: accessTier,
-      token_count: chunk.tokenCount,
-      metadata:    { file_name: fileName },
-    }));
-
-    const { error: insertError } = await supabase.from('kb_chunks').insert(rows);
-    if (insertError) throw new Error(`Chunk insert failed: ${insertError.message}`);
-
-    // 5. Mark document as ready
-    const { error: updateError } = await supabase
-      .from('kb_documents')
-      .update({ status: 'ready', chunk_count: chunks.length, error: null })
-      .eq('id', docId);
-
-    if (updateError) throw new Error(`Status update failed: ${updateError.message}`);
-
-    console.log('KB_INGEST_DONE', { docId, chunks: chunks.length });
-  } catch (err: any) {
-    console.error('KB_INGEST_ERROR', { docId, message: err.message });
-    await supabase
-      .from('kb_documents')
-      .update({ status: 'failed', error: err.message })
-      .eq('id', docId);
-  }
-}
+const STORAGE_BUCKET = 'kb-source-files';
 
 // ── POST /api/kb/ingest ──────────────────────────────────────────────────────
 
@@ -104,8 +39,8 @@ export async function POST(request: NextRequest) {
   const category   = (formData.get('category') as string | null)?.trim() || null;
 
   // Validate
-  if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
-  if (!title) return NextResponse.json({ error: 'Title is required' }, { status: 400 });
+  if (!file)  return NextResponse.json({ error: 'No file provided' },    { status: 400 });
+  if (!title) return NextResponse.json({ error: 'Title is required' },   { status: 400 });
 
   const ext = file.name.split('.').pop()?.toLowerCase();
   if (!['txt', 'md'].includes(ext ?? '')) {
@@ -154,8 +89,27 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Fire-and-forget background processing
-  waitUntil(processDocument(doc.id, rawText, accessTier, file.name));
+  // Save the source file to storage so it can be re-processed later.
+  // Path: {docId}/{originalFileName}
+  const storagePath = `${doc.id}/${file.name}`;
+  const { error: storageError } = await adminSupabase.storage
+    .from(STORAGE_BUCKET)
+    .upload(storagePath, file, { contentType: 'text/plain', upsert: true });
+
+  if (storageError) {
+    // Non-fatal: log the warning but don't block ingestion.
+    // The document can still be processed; it just won't be re-processable later.
+    console.warn('KB_INGEST_STORAGE_WARN', { docId: doc.id, error: storageError.message });
+  } else {
+    // Record the path on the document row
+    await adminSupabase
+      .from('kb_documents')
+      .update({ file_path: storagePath })
+      .eq('id', doc.id);
+  }
+
+  // Fire-and-forget background processing via the shared helper
+  waitUntil(processDocument(doc.id, rawText));
 
   return NextResponse.json({ success: true, documentId: doc.id, status: 'processing' });
 }

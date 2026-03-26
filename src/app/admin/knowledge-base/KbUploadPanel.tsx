@@ -13,15 +13,30 @@ const ACCESS_TIERS = [
   { value: 'admin',     label: 'Admin — admin queries only' },
 ];
 
+type Tab = 'upload' | 'quickadd';
+
 export function KbUploadPanel({ onUploaded }: KbUploadPanelProps) {
-  const [file, setFile]             = useState<File | null>(null);
-  const [title, setTitle]           = useState('');
+  const [activeTab, setActiveTab] = useState<Tab>('upload');
+
+  // ── Upload File state ──────────────────────────────────────────────────────
+  const [file,       setFile]       = useState<File | null>(null);
+  const [title,      setTitle]      = useState('');
   const [accessTier, setAccessTier] = useState('general');
-  const [category, setCategory]     = useState('');
-  const [dragging, setDragging]     = useState(false);
-  const [uploading, setUploading]   = useState(false);
-  const [error, setError]           = useState('');
+  const [category,   setCategory]   = useState('');
+  const [dragging,   setDragging]   = useState(false);
+  const [uploading,  setUploading]  = useState(false);
+  const [uploadErr,  setUploadErr]  = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // ── Quick Add state ────────────────────────────────────────────────────────
+  const [qaTitle,      setQaTitle]      = useState('');
+  const [qaContent,    setQaContent]    = useState('');
+  const [qaAccessTier, setQaAccessTier] = useState('general');
+  const [qaCategory,   setQaCategory]   = useState('');
+  const [qaSubmitting, setQaSubmitting] = useState(false);
+  const [qaErr,        setQaErr]        = useState('');
+
+  // ── Upload File logic ──────────────────────────────────────────────────────
 
   function fileDisplayName(f: File) {
     return f.name.length > 40 ? `${f.name.slice(0, 37)}…` : f.name;
@@ -29,8 +44,7 @@ export function KbUploadPanel({ onUploaded }: KbUploadPanelProps) {
 
   function applyFile(f: File) {
     setFile(f);
-    setError('');
-    // Auto-fill title from filename if blank
+    setUploadErr('');
     if (!title) {
       const base = f.name.replace(/\.(txt|md)$/i, '').replace(/[-_]/g, ' ');
       setTitle(base.charAt(0).toUpperCase() + base.slice(1));
@@ -47,142 +61,266 @@ export function KbUploadPanel({ onUploaded }: KbUploadPanelProps) {
     [title], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleUploadSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!file) { setError('Please select a file.'); return; }
-    if (!title.trim()) { setError('Please enter a title.'); return; }
+    if (!file)         { setUploadErr('Please select a file.'); return; }
+    if (!title.trim()) { setUploadErr('Please enter a title.'); return; }
 
-    setError('');
+    setUploadErr('');
     setUploading(true);
 
     const formData = new FormData();
-    formData.append('file', file);
-    formData.append('title', title.trim());
+    formData.append('file',        file);
+    formData.append('title',       title.trim());
     formData.append('access_tier', accessTier);
-    formData.append('category', category.trim());
+    formData.append('category',    category.trim());
 
     try {
-      const res = await fetch('/api/kb/ingest', { method: 'POST', body: formData });
+      const res  = await fetch('/api/kb/ingest', { method: 'POST', body: formData });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Upload failed');
 
-      // Reset form
       setFile(null);
       setTitle('');
       setAccessTier('general');
       setCategory('');
       if (inputRef.current) inputRef.current.value = '';
-
       onUploaded(json.documentId);
     } catch (err: any) {
-      setError(err.message);
+      setUploadErr(err.message);
     } finally {
       setUploading(false);
     }
   }
 
+  // ── Quick Add logic ────────────────────────────────────────────────────────
+
+  async function handleQuickAddSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!qaTitle.trim())   { setQaErr('Title is required.');   return; }
+    if (!qaContent.trim()) { setQaErr('Content is required.'); return; }
+
+    setQaErr('');
+    setQaSubmitting(true);
+
+    // Wrap the text in a synthetic .txt File so the ingest route handles it
+    // identically to a file upload — no route changes needed.
+    const slug     = qaTitle.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const fakeFile = new File([qaContent.trim()], `${slug}.txt`, { type: 'text/plain' });
+
+    const formData = new FormData();
+    formData.append('file',        fakeFile);
+    formData.append('title',       qaTitle.trim());
+    formData.append('access_tier', qaAccessTier);
+    formData.append('category',    qaCategory.trim());
+
+    try {
+      const res  = await fetch('/api/kb/ingest', { method: 'POST', body: formData });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Ingest failed');
+
+      setQaTitle('');
+      setQaContent('');
+      setQaAccessTier('general');
+      setQaCategory('');
+      onUploaded(json.documentId);
+    } catch (err: any) {
+      setQaErr(err.message);
+    } finally {
+      setQaSubmitting(false);
+    }
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
   return (
-    <form className={styles.uploadPanel} onSubmit={handleSubmit}>
-      <h2 className={styles.uploadTitle}>Add Document</h2>
+    <div className={styles.uploadPanel}>
 
-      {/* Drop zone */}
-      <div
-        className={`${styles.dropZone} ${dragging ? styles.dropZoneDragging : ''} ${file ? styles.dropZoneHasFile : ''}`}
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={onDrop}
-        onClick={() => inputRef.current?.click()}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => e.key === 'Enter' && inputRef.current?.click()}
-      >
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".txt,.md"
-          style={{ display: 'none' }}
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) applyFile(f); }}
-        />
-        {file ? (
-          <div className={styles.dropZoneFile}>
-            <span className={styles.dropZoneFileIcon}>📄</span>
-            <span className={styles.dropZoneFileName}>{fileDisplayName(file)}</span>
-            <button
-              type="button"
-              className={styles.dropZoneClear}
-              onClick={(e) => { e.stopPropagation(); setFile(null); }}
-            >
-              ✕
-            </button>
-          </div>
-        ) : (
-          <div className={styles.dropZonePrompt}>
-            <span className={styles.dropZoneIcon}>⬆</span>
-            <span className={styles.dropZoneText}>
-              Drag &amp; drop a <strong>.txt</strong> or <strong>.md</strong> file here
-            </span>
-            <span className={styles.dropZoneOr}>or click to browse</span>
-          </div>
-        )}
-      </div>
-
-      {/* Title */}
-      <div className={styles.uploadField}>
-        <label className={styles.uploadLabel}>Title</label>
-        <input
-          className={styles.uploadInput}
-          type="text"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="e.g. Google Ads — Agency FAQs"
-          required
-        />
-      </div>
-
-      {/* Access Tier */}
-      <div className={styles.uploadField}>
-        <label className={styles.uploadLabel}>Access Tier</label>
-        <select
-          className={styles.uploadSelect}
-          value={accessTier}
-          onChange={(e) => setAccessTier(e.target.value)}
+      {/* Tab bar */}
+      <div className={styles.tabBar}>
+        <button
+          type="button"
+          className={`${styles.tab} ${activeTab === 'upload' ? styles.tabActive : ''}`}
+          onClick={() => setActiveTab('upload')}
         >
-          {ACCESS_TIERS.map((t) => (
-            <option key={t.value} value={t.value}>{t.label}</option>
-          ))}
-        </select>
+          Upload File
+        </button>
+        <button
+          type="button"
+          className={`${styles.tab} ${activeTab === 'quickadd' ? styles.tabActive : ''}`}
+          onClick={() => setActiveTab('quickadd')}
+        >
+          Quick Add
+        </button>
       </div>
 
-      {/* Category */}
-      <div className={styles.uploadField}>
-        <label className={styles.uploadLabel}>
-          Category <span className={styles.uploadOptional}>(optional)</span>
-        </label>
-        <input
-          className={styles.uploadInput}
-          type="text"
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          placeholder="e.g. google-ads, onboarding, pricing"
-        />
-      </div>
+      {/* ── Upload File tab ── */}
+      {activeTab === 'upload' && (
+        <form className={styles.tabForm} onSubmit={handleUploadSubmit}>
 
-      {error && <div className={styles.uploadError}>{error}</div>}
+          {/* Drop zone */}
+          <div
+            className={`${styles.dropZone} ${dragging ? styles.dropZoneDragging : ''} ${file ? styles.dropZoneHasFile : ''}`}
+            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={onDrop}
+            onClick={() => inputRef.current?.click()}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Enter' && inputRef.current?.click()}
+          >
+            <input
+              ref={inputRef}
+              type="file"
+              accept=".txt,.md"
+              style={{ display: 'none' }}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) applyFile(f); }}
+            />
+            {file ? (
+              <div className={styles.dropZoneFile}>
+                <span className={styles.dropZoneFileIcon}>📄</span>
+                <span className={styles.dropZoneFileName}>{fileDisplayName(file)}</span>
+                <button
+                  type="button"
+                  className={styles.dropZoneClear}
+                  onClick={(e) => { e.stopPropagation(); setFile(null); }}
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <div className={styles.dropZonePrompt}>
+                <span className={styles.dropZoneIcon}>⬆</span>
+                <span className={styles.dropZoneText}>
+                  Drag &amp; drop a <strong>.txt</strong> or <strong>.md</strong> file here
+                </span>
+                <span className={styles.dropZoneOr}>or click to browse</span>
+              </div>
+            )}
+          </div>
 
-      <button
-        type="submit"
-        className={styles.uploadBtn}
-        disabled={uploading || !file}
-      >
-        {uploading ? (
-          <>
-            <span className={styles.uploadSpinner} />
-            Uploading…
-          </>
-        ) : (
-          'Ingest Document'
-        )}
-      </button>
-    </form>
+          {/* Title */}
+          <div className={styles.uploadField}>
+            <label className={styles.uploadLabel}>Title</label>
+            <input
+              className={styles.uploadInput}
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Google Ads — Agency FAQs"
+              required
+            />
+          </div>
+
+          {/* Access Tier */}
+          <div className={styles.uploadField}>
+            <label className={styles.uploadLabel}>Access Tier</label>
+            <select
+              className={styles.uploadSelect}
+              value={accessTier}
+              onChange={(e) => setAccessTier(e.target.value)}
+            >
+              {ACCESS_TIERS.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Category */}
+          <div className={styles.uploadField}>
+            <label className={styles.uploadLabel}>
+              Category <span className={styles.uploadOptional}>(optional)</span>
+            </label>
+            <input
+              className={styles.uploadInput}
+              type="text"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              placeholder="e.g. google-ads, onboarding, pricing"
+            />
+          </div>
+
+          {uploadErr && <div className={styles.uploadError}>{uploadErr}</div>}
+
+          <button type="submit" className={styles.uploadBtn} disabled={uploading || !file}>
+            {uploading ? (
+              <><span className={styles.uploadSpinner} /> Uploading…</>
+            ) : (
+              'Ingest Document'
+            )}
+          </button>
+        </form>
+      )}
+
+      {/* ── Quick Add tab ── */}
+      {activeTab === 'quickadd' && (
+        <form className={styles.tabForm} onSubmit={handleQuickAddSubmit}>
+
+          {/* Title */}
+          <div className={styles.uploadField}>
+            <label className={styles.uploadLabel}>Title</label>
+            <input
+              className={styles.uploadInput}
+              type="text"
+              value={qaTitle}
+              onChange={(e) => setQaTitle(e.target.value)}
+              placeholder="e.g. Cloudways SOP — Server Setup"
+              required
+            />
+          </div>
+
+          {/* Content */}
+          <div className={styles.uploadField}>
+            <label className={styles.uploadLabel}>Content</label>
+            <textarea
+              className={styles.qaTextarea}
+              value={qaContent}
+              onChange={(e) => setQaContent(e.target.value)}
+              placeholder="Paste or type your document content here..."
+              rows={8}
+              required
+            />
+          </div>
+
+          {/* Access Tier */}
+          <div className={styles.uploadField}>
+            <label className={styles.uploadLabel}>Access Tier</label>
+            <select
+              className={styles.uploadSelect}
+              value={qaAccessTier}
+              onChange={(e) => setQaAccessTier(e.target.value)}
+            >
+              {ACCESS_TIERS.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Category */}
+          <div className={styles.uploadField}>
+            <label className={styles.uploadLabel}>
+              Category <span className={styles.uploadOptional}>(optional)</span>
+            </label>
+            <input
+              className={styles.uploadInput}
+              type="text"
+              value={qaCategory}
+              onChange={(e) => setQaCategory(e.target.value)}
+              placeholder="e.g. google-ads, onboarding, pricing"
+            />
+          </div>
+
+          {qaErr && <div className={styles.uploadError}>{qaErr}</div>}
+
+          <button type="submit" className={styles.uploadBtn} disabled={qaSubmitting || !qaTitle.trim() || !qaContent.trim()}>
+            {qaSubmitting ? (
+              <><span className={styles.uploadSpinner} /> Ingesting…</>
+            ) : (
+              'Ingest Document'
+            )}
+          </button>
+        </form>
+      )}
+    </div>
   );
 }

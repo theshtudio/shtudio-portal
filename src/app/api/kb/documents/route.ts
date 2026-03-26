@@ -45,7 +45,7 @@ export async function GET() {
     try {
       const { data, error } = await adminSupabase
         .from('kb_documents')
-        .select('id, title, file_name, access_tier, category, status, chunk_count, error, created_at')
+        .select('id, title, file_name, file_path, access_tier, category, status, chunk_count, error, created_at')
         .order('created_at', { ascending: false });
 
       if (error) throw error;

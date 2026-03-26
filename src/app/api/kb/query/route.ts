@@ -97,18 +97,23 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Log to kb_queries ──────────────────────────────────────────────────────
-  await adminSupabase.from('kb_queries').insert({
-    question,
-    answer,
-    chunks_used: hadResults ? (chunks as any[]).length : 0,
-    had_results: hadResults,
-    queried_by:  user.id,
-  });
+  const { data: queryRow } = await adminSupabase
+    .from('kb_queries')
+    .insert({
+      question,
+      answer,
+      chunks_used: hadResults ? (chunks as any[]).length : 0,
+      had_results: hadResults,
+      queried_by:  user.id,
+    })
+    .select('id')
+    .single();
 
   // ── Respond ────────────────────────────────────────────────────────────────
   return NextResponse.json({
     answer,
     hadResults,
+    queryId: queryRow?.id ?? null,
     sources: hadResults ? (chunks as any[]).map((c) => c.id) : [],
   });
 }
