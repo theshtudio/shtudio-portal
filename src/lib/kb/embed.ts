@@ -42,15 +42,44 @@ function prepareText(text: string): string {
   return normalised.length > MAX_CHARS ? normalised.slice(0, MAX_CHARS) : normalised;
 }
 
+// Exponential-backoff retry for 429 rate-limit responses
+const EMBED_MAX_RETRIES   = 3;
+const EMBED_RETRY_BASE_MS = 5_000;
+
+async function withEmbedRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
+  for (let attempt = 0; attempt <= EMBED_MAX_RETRIES; attempt++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      const is429 = err?.status === 429 || err?.error?.type === 'rate_limit_error';
+      if (is429) {
+        const delayMs = EMBED_RETRY_BASE_MS * Math.pow(2, attempt);
+        console.error('KB_EMBED_429', {
+          label,
+          attempt: attempt + 1,
+          retryInMs: delayMs,
+          message: err.message,
+        });
+        if (attempt < EMBED_MAX_RETRIES) {
+          await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+          continue;
+        }
+      }
+      throw err;
+    }
+  }
+  throw new Error('withEmbedRetry: exceeded retry limit');
+}
+
 /**
  * Embed a single string.
  * Returns a 1536-dimensional float array.
  */
 export async function embedText(text: string): Promise<number[]> {
-  const response = await getClient().embeddings.create({
-    model: MODEL,
-    input: prepareText(text),
-  });
+  const response = await withEmbedRetry(
+    () => getClient().embeddings.create({ model: MODEL, input: prepareText(text) }),
+    'embedText',
+  );
   return response.data[0].embedding;
 }
 
@@ -71,10 +100,11 @@ export async function embedBatch(texts: string[]): Promise<number[][]> {
 
   for (let i = 0; i < prepared.length; i += BATCH_SIZE) {
     const slice    = prepared.slice(i, i + BATCH_SIZE);
-    const response = await getClient().embeddings.create({
-      model: MODEL,
-      input: slice,
-    });
+    const batchLabel = `batch ${Math.floor(i / BATCH_SIZE) + 1} (chunks ${i + 1}–${Math.min(i + BATCH_SIZE, prepared.length)})`;
+    const response = await withEmbedRetry(
+      () => getClient().embeddings.create({ model: MODEL, input: slice }),
+      batchLabel,
+    );
 
     // API returns items sorted by index (relative to this sub-batch call),
     // but sort defensively to be safe.

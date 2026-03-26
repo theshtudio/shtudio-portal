@@ -48,29 +48,57 @@ async function isEnglish(sample: string): Promise<boolean> {
   return reply.startsWith('YES');
 }
 
+// Exponential-backoff retry for 429 rate-limit responses
+const TRANSLATE_MAX_RETRIES = 3;
+const TRANSLATE_RETRY_BASE_MS = 5_000;
+
 /**
  * Translate one segment of text to English.
  * The prompt instructs Claude to return only the translated text, no commentary.
+ * Retries up to TRANSLATE_MAX_RETRIES times on 429 rate-limit errors with
+ * exponential backoff starting at TRANSLATE_RETRY_BASE_MS.
  */
-async function translateSegment(text: string): Promise<string> {
-  const message = await getClient().messages.create({
-    model: MODEL,
-    max_tokens: 4_096,
-    messages: [
-      {
-        role: 'user',
-        content:
-          'Translate the following text to English. ' +
-          'Return only the translated text — no preamble, no commentary, no explanations.\n\n' +
-          text,
-      },
-    ],
-  });
+async function translateSegment(text: string, segLabel?: string): Promise<string> {
+  for (let attempt = 0; attempt <= TRANSLATE_MAX_RETRIES; attempt++) {
+    try {
+      const message = await getClient().messages.create({
+        model: MODEL,
+        max_tokens: 4_096,
+        messages: [
+          {
+            role: 'user',
+            content:
+              'Translate the following text to English. ' +
+              'Return only the translated text — no preamble, no commentary, no explanations.\n\n' +
+              text,
+          },
+        ],
+      });
 
-  return message.content
-    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-    .map((b) => b.text)
-    .join('');
+      return message.content
+        .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+        .map((b) => b.text)
+        .join('');
+    } catch (err: any) {
+      const is429 = err?.status === 429 || err?.error?.type === 'rate_limit_error';
+      if (is429) {
+        const delayMs = TRANSLATE_RETRY_BASE_MS * Math.pow(2, attempt);
+        console.error('KB_TRANSLATE_429', {
+          segment: segLabel,
+          attempt: attempt + 1,
+          retryInMs: delayMs,
+          message: err.message,
+        });
+        if (attempt < TRANSLATE_MAX_RETRIES) {
+          await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+          continue;
+        }
+      }
+      throw err;
+    }
+  }
+  // Unreachable — loop always throws or returns
+  throw new Error('translateSegment: exceeded retry limit');
 }
 
 /**
@@ -94,9 +122,10 @@ export async function translateToEnglish(text: string): Promise<string> {
   for (let i = 0; i < words.length; i += SEGMENT_WORDS) {
     const segNum  = Math.floor(i / SEGMENT_WORDS) + 1;
     const total   = Math.ceil(words.length / SEGMENT_WORDS);
+    const segLabel = `${segNum}/${total}`;
     console.log('KB_TRANSLATE_SEGMENT_START', { segment: segNum, of: total, wordOffset: i });
     const segment    = words.slice(i, i + SEGMENT_WORDS).join(' ');
-    const translated = await translateSegment(segment);
+    const translated = await translateSegment(segment, segLabel);
     segments.push(translated);
     console.log('KB_TRANSLATE_SEGMENT_DONE', { segment: segNum, of: total, words: Math.min(i + SEGMENT_WORDS, words.length) });
   }
