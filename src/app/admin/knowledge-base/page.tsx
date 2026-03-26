@@ -7,16 +7,17 @@ import styles from './page.module.css';
 export default async function KnowledgeBasePage() {
   const supabase = createServiceSupabase();
 
-  const [{ data: documents }, { count: flaggedCount }] = await Promise.all([
-    supabase
-      .from('kb_documents')
-      .select('id, title, file_name, file_path, access_tier, category, status, chunk_count, error, created_at')
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('kb_queries')
-      .select('*', { count: 'exact', head: true })
-      .eq('flagged', true),
-  ]);
+  // Run queries independently so a missing table (e.g. kb_queries before its
+  // migration is applied) never crashes the page render.
+  const { data: documents } = await supabase
+    .from('kb_documents')
+    .select('id, title, file_name, file_path, access_tier, category, status, chunk_count, error, created_at')
+    .order('created_at', { ascending: false });
+
+  const { count: flaggedCount } = await supabase
+    .from('kb_queries')
+    .select('*', { count: 'exact', head: true })
+    .eq('flagged', true);
 
   const hasFlagged = (flaggedCount ?? 0) > 0;
 
