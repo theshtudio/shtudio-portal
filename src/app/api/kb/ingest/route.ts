@@ -55,10 +55,12 @@ async function processDocument(
     if (insertError) throw new Error(`Chunk insert failed: ${insertError.message}`);
 
     // 5. Mark document as ready
-    await supabase
+    const { error: updateError } = await supabase
       .from('kb_documents')
       .update({ status: 'ready', chunk_count: chunks.length, error: null })
       .eq('id', docId);
+
+    if (updateError) throw new Error(`Status update failed: ${updateError.message}`);
 
     console.log('KB_INGEST_DONE', { docId, chunks: chunks.length });
   } catch (err: any) {

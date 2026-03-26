@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { StatusBadge } from '@/components/StatusBadge/StatusBadge';
 import styles from './page.module.css';
@@ -31,44 +31,24 @@ function statusToBadge(status: string): { badge: 'processing' | 'completed' | 'f
 }
 
 interface KbDocumentListProps {
-  initialDocuments: KbDocument[];
+  documents: KbDocument[];
 }
 
-export function KbDocumentList({ initialDocuments }: KbDocumentListProps) {
-  const [docs, setDocs] = useState<KbDocument[]>(initialDocuments);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const supabase = createClient();
+export function KbDocumentList({ documents }: KbDocumentListProps) {
+  const router = useRouter();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const hasProcessing = docs.some((d) => d.status === 'processing');
-
-  const fetchDocs = useCallback(async () => {
-    const { data } = await supabase
-      .from('kb_documents')
-      .select('id, title, file_name, access_tier, category, status, chunk_count, error, created_at')
-      .order('created_at', { ascending: false });
-
-    if (data) setDocs(data as KbDocument[]);
-  }, [supabase]);
-
-  // Poll every 5 s while any document is processing
-  useEffect(() => {
-    if (!hasProcessing) {
-      if (pollRef.current) clearInterval(pollRef.current);
-      return;
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    try {
+      await fetch(`/api/kb/documents/${id}`, { method: 'DELETE' });
+      router.refresh();
+    } finally {
+      setDeletingId(null);
     }
+  }
 
-    pollRef.current = setInterval(fetchDocs, 5000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [hasProcessing, fetchDocs]);
-
-  // Expose a refresh method via a custom event so the upload panel can trigger it
-  useEffect(() => {
-    function onRefresh() { fetchDocs(); }
-    window.addEventListener('kb:refresh', onRefresh);
-    return () => window.removeEventListener('kb:refresh', onRefresh);
-  }, [fetchDocs]);
-
-  if (docs.length === 0) {
+  if (!documents || documents.length === 0) {
     return (
       <div className={styles.empty}>
         <div className={styles.emptyIcon}>📚</div>
@@ -89,11 +69,13 @@ export function KbDocumentList({ initialDocuments }: KbDocumentListProps) {
             <th className={styles.th}>Status</th>
             <th className={styles.th}>Chunks</th>
             <th className={styles.th}>Uploaded</th>
+            <th className={styles.th}></th>
           </tr>
         </thead>
         <tbody>
-          {docs.map((doc) => {
+          {documents.map((doc) => {
             const { badge, label } = statusToBadge(doc.status);
+            const isDeleting = deletingId === doc.id;
             return (
               <tr key={doc.id} className={styles.tr}>
                 <td className={styles.td}>
@@ -129,8 +111,18 @@ export function KbDocumentList({ initialDocuments }: KbDocumentListProps) {
                 </td>
                 <td className={styles.td}>
                   <span className={styles.dateCell}>
-                    {format(new Date(doc.created_at), 'dd MMM yyyy')}
+                    {format(new Date(doc.created_at), "d MMM yyyy, h:mm aaa")}
                   </span>
+                </td>
+                <td className={styles.td}>
+                  <button
+                    className={styles.deleteBtn}
+                    onClick={() => handleDelete(doc.id)}
+                    disabled={isDeleting}
+                    aria-label={`Delete ${doc.title}`}
+                  >
+                    {isDeleting ? '…' : 'Delete'}
+                  </button>
                 </td>
               </tr>
             );

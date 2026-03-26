@@ -29,7 +29,13 @@
       "Bash(taskkill //f //im node.exe)",
       "Bash(npx tsc --noEmit)",
       "Bash(npm ls pdf-parse)",
-      "Bash(node -e \"try { require\\(''pdf-parse''\\); console.log\\(''OK''\\); } catch\\(e\\) { console.log\\(''ERROR:'', e.message\\); }\")"
+      "Bash(node -e \"try { require\\(''pdf-parse''\\); console.log\\(''OK''\\); } catch\\(e\\) { console.log\\(''ERROR:'', e.message\\); }\")",
+      "Bash(npm install @vercel/functions)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(xargs grep:*)",
+      "Bash(ls -la /c/Users/vlass/Documents/shtudio-portal/src/app/admin/reports/[id]/)"
     ]
   }
 }
