@@ -55,7 +55,12 @@ export async function POST(
     .download(doc.file_path);
 
   if (downloadError || !fileData) {
-    console.error('KB_REPROCESS_DOWNLOAD_ERROR', { docId, error: downloadError?.message });
+    console.error('KB_REPROCESS_DOWNLOAD_ERROR', {
+      docId,
+      message: downloadError?.message,
+      status:  downloadError?.status,
+      error:   downloadError,
+    });
     return NextResponse.json(
       { error: `Failed to download source file: ${downloadError?.message ?? 'unknown error'}` },
       { status: 500 },

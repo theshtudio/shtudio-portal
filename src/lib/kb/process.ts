@@ -90,7 +90,12 @@ export async function processDocument(
     console.log('KB_PROCESS_DONE', { docId, chunks: chunks.length });
 
   } catch (err: any) {
-    console.error('KB_PROCESS_ERROR', { docId, message: err.message });
+    console.error('KB_PROCESS_ERROR', {
+      docId,
+      message: err.message,
+      stack:   err.stack ?? '(no stack)',
+      error:   err,
+    });
     await supabase
       .from('kb_documents')
       .update({ status: 'failed', error: err.message })
