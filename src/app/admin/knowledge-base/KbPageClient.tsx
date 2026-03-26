@@ -97,7 +97,26 @@ export function KbPageClient({ initialDocuments }: KbPageClientProps) {
     );
   }
 
-  // ── Re-process all (sequential to avoid hammering the embedding API) ────────
+  // ── Wait for a single document to leave 'processing' status ──────────────
+  //
+  // Polls GET /api/kb/documents every 3 s and calls applyFresh on each poll
+  // so the progress bar, elapsed timer and green flash all stay live.
+  // Gives up after MAX_POLLS (5 minutes) to avoid hanging forever.
+
+  const waitForDocumentToSettle = useCallback(async (id: string): Promise<void> => {
+    const MAX_POLLS = 100; // 100 × 3 s = 5 min ceiling
+    for (let poll = 0; poll < MAX_POLLS; poll++) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 3_000));
+      const fresh = await fetchDocuments();
+      applyFresh(fresh);
+      const doc = fresh.find((d) => d.id === id);
+      // Settle once the doc is gone, ready, or failed
+      if (!doc || doc.status === 'ready' || doc.status === 'failed') return;
+    }
+  }, [fetchDocuments, applyFresh]);
+
+  // ── Re-process all (sequential — waits for each doc to settle before ──────
+  //    starting the next one so the embedding API isn't hammered)
 
   async function handleReprocessAll() {
     const docsToProcess = documentsRef.current;
@@ -111,16 +130,18 @@ export function KbPageClient({ initialDocuments }: KbPageClientProps) {
       const doc = docsToProcess[i];
       setReprocessCurrent(i + 1);
 
-      // Optimistically flip to processing
+      // Optimistically flip to processing so the progress bar appears immediately
       setDocuments((prev) =>
         prev.map((d) =>
           d.id === doc.id ? { ...d, status: 'processing', chunk_count: null, error: null } : d,
         ),
       );
 
-      // Only reprocess documents that have a stored source file
       if (doc.file_path) {
         await fetch(`/api/kb/documents/${doc.id}/reprocess`, { method: 'POST' });
+        // Wait for this document to reach 'ready' or 'failed' before
+        // proceeding — keeps embedding API calls fully sequential.
+        await waitForDocumentToSettle(doc.id);
       }
     }
 

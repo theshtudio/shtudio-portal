@@ -12,6 +12,10 @@ const MAX_CHARS    = MAX_TOKENS * 4; // 32 000
 // avoids triggering per-request token-count limits on large documents
 const BATCH_SIZE   = 10;
 
+// Pause between consecutive embedding API calls to stay under OpenAI's
+// rate limits (requests-per-minute on the embeddings endpoint).
+const INTER_BATCH_DELAY_MS = 1_000;
+
 let _client: OpenAI | null = null;
 function getClient(): OpenAI {
   if (!_client) {
@@ -75,6 +79,13 @@ export async function embedBatch(texts: string[]): Promise<number[][]> {
       .forEach((item, j) => {
         results[i + j] = item.embedding;
       });
+
+    // Pause between batches to avoid hitting OpenAI's requests-per-minute
+    // rate limit. Skip the delay after the final batch.
+    const hasMore = i + BATCH_SIZE < prepared.length;
+    if (hasMore) {
+      await new Promise<void>((resolve) => setTimeout(resolve, INTER_BATCH_DELAY_MS));
+    }
   }
 
   return results;
