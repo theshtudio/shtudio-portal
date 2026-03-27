@@ -94,30 +94,29 @@ export async function POST(request: NextRequest) {
   const hadResults = Array.isArray(chunks) && chunks.length > 0;
 
   // ── Generate answer ────────────────────────────────────────────────────────
+  // Always call Claude — even with an empty context — so the system prompt can
+  // handle privacy refusals correctly instead of bypassing them with an early
+  // generic fallback.
   let answer: string;
 
-  if (!hadResults) {
-    answer = FALLBACK_ANSWER;
-  } else {
-    const context = (chunks as any[])
-      .map((c, i) => `[${i + 1}] ${c.content}`)
-      .join('\n\n');
+  const context = hadResults
+    ? (chunks as any[]).map((c, i) => `[${i + 1}] ${c.content}`).join('\n\n')
+    : '';
 
-    try {
-      const response = await anthropic.messages.create({
-        model:      'claude-haiku-4-5-20251001',
-        max_tokens: 1024,
-        system:     SYSTEM_PROMPT,
-        messages:   [{ role: 'user', content: `Context:\n${context}\n\nQuestion: ${question}` }],
-      });
+  try {
+    const response = await anthropic.messages.create({
+      model:      'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      system:     SYSTEM_PROMPT,
+      messages:   [{ role: 'user', content: `Context:\n${context}\n\nQuestion: ${question}` }],
+    });
 
-      answer = response.content[0].type === 'text'
-        ? response.content[0].text
-        : FALLBACK_ANSWER;
-    } catch (err: any) {
-      console.error('[POST /api/kb/query] Claude call failed:', err.message);
-      return NextResponse.json({ error: 'AI call failed' }, { status: 500 });
-    }
+    answer = response.content[0].type === 'text'
+      ? response.content[0].text
+      : FALLBACK_ANSWER;
+  } catch (err: any) {
+    console.error('[POST /api/kb/query] Claude call failed:', err.message);
+    return NextResponse.json({ error: 'AI call failed' }, { status: 500 });
   }
 
   // ── Log to kb_queries ──────────────────────────────────────────────────────
