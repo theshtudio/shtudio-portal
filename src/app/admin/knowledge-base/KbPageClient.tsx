@@ -13,6 +13,7 @@ interface KbPageClientProps {
 export function KbPageClient({ initialDocuments }: KbPageClientProps) {
   const [documents,    setDocuments]    = useState<KbDocument[]>(initialDocuments);
   const [justReadyIds, setJustReadyIds] = useState<Set<string>>(new Set());
+  const [panelOpen,    setPanelOpen]    = useState(false);
 
   // Re-process all state
   const [reprocessingAll,  setReprocessingAll]  = useState(false);
@@ -151,8 +152,8 @@ export function KbPageClient({ initialDocuments }: KbPageClientProps) {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className={styles.layout}>
-      <div className={styles.listCol}>
+    <>
+      <div className={styles.layout}>
 
         {/* Toolbar above the document table */}
         <div className={styles.listToolbar}>
@@ -171,6 +172,13 @@ export function KbPageClient({ initialDocuments }: KbPageClientProps) {
               ↺ Re-process all ({documents.length})
             </button>
           )}
+
+          <button
+            className={styles.addDocBtn}
+            onClick={() => setPanelOpen(true)}
+          >
+            + Add Document
+          </button>
         </div>
 
         <KbDocumentList
@@ -181,9 +189,26 @@ export function KbPageClient({ initialDocuments }: KbPageClientProps) {
         />
       </div>
 
-      <div className={styles.uploadCol}>
-        <KbUploadPanel onUploaded={handleUploaded} />
+      {/* Slide-in upload drawer */}
+      {panelOpen && (
+        <div
+          className={styles.uploadDrawerOverlay}
+          onClick={() => setPanelOpen(false)}
+        />
+      )}
+      <div className={`${styles.uploadDrawer} ${panelOpen ? styles.uploadDrawerOpen : ''}`}>
+        <div className={styles.uploadDrawerHeader}>
+          <span className={styles.uploadDrawerTitle}>Add Document</span>
+          <button
+            className={styles.uploadDrawerClose}
+            onClick={() => setPanelOpen(false)}
+            aria-label="Close panel"
+          >
+            ✕
+          </button>
+        </div>
+        <KbUploadPanel onUploaded={() => { handleUploaded(); setPanelOpen(false); }} />
       </div>
-    </div>
+    </>
   );
 }

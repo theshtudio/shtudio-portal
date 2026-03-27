@@ -100,7 +100,7 @@ export function KbDocumentList({
             <th className={styles.th}>Tier</th>
             <th className={styles.th}>Category</th>
             <th className={styles.th}>Status</th>
-            <th className={styles.th}>Chunks</th>
+            <th className={styles.th}>Sections</th>
             <th className={styles.th}>Uploaded</th>
             <th className={styles.th}></th>
           </tr>
