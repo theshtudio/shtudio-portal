@@ -1,5 +1,5 @@
 /**
- * Summarises a raw document into structured business prose using Claude Haiku.
+ * Summarises a raw document into structured business prose using Claude Sonnet.
  *
  * For large documents (> SEGMENT_WORDS words) the text is summarised in
  * segments and then merged with one additional Claude call so the final
@@ -8,7 +8,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 
-const MODEL        = 'claude-haiku-4-5-20251001';
+const MODEL        = 'claude-sonnet-4-5-20251001';
 const SEGMENT_WORDS = 3_000;
 
 const SYSTEM_PROMPT = `You are processing an internal business document for a digital marketing agency called Shtudio based in Sydney, Australia. Your job is to extract and summarise the key business information from this document into clean, structured prose that will be stored in a knowledge base and searched later.
@@ -29,6 +29,8 @@ Do NOT include:
 - Personal opinions about individuals
 - Internal staff salaries, contractor rates, or what individual team members are paid
 - Exact quotes or transcript-style formatting
+
+Be extremely careful with names — only include client names, people names, and company names that are clearly and explicitly stated in the source text. If a name is unclear or you are not certain, omit it rather than guess. Never invent or approximate names.
 
 Write in clear business English as structured paragraphs. If the source is a meeting transcript, write it as "In the [month/date] meeting, the team discussed..." Format it so someone reading it later can quickly understand what happened and what was decided.`;
 
