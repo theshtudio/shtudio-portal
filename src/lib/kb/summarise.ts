@@ -23,6 +23,9 @@ Extract and include:
 - Any operational issues or processes mentioned
 - Services being offered or developed
 - Pricing discussed for client-facing services (e.g. what was quoted or charged to a client for a project) — always note the date this was from so it can be treated as potentially outdated
+- People and organisations: for every person mentioned, extract their full name, the company or agency they represent, their location if mentioned, and their role or what they were responsible for in the context of this document. Format this as a dedicated "People & Organisations Mentioned" section at the end of every summary. Example format:
+  - Oleksii Sheiko — LuxSite Digital Agency (Kyiv) — external developer, handles frontend development for client websites
+  - Madina Mukhamedova — Shtudio — SEO and project coordination
 
 Do NOT include:
 - Small talk or off-topic conversation
