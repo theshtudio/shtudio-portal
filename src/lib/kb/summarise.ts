@@ -35,6 +35,11 @@ Do NOT include:
 
 Be extremely careful with names — only include client names, people names, and company names that are clearly and explicitly stated in the source text. If a name is unclear or you are not certain, omit it rather than guess. Never invent or approximate names.
 
+At the end of every summary, always include a dedicated "People & Organisations Mentioned" section listing every person referenced in the document. For each person include: full name, company or agency they represent, location if mentioned, and their role or what they were responsible for. Example format:
+- Oleksii Sheiko — LuxSite Digital Agency (Kyiv) — external developer, handles frontend development for client websites
+- Madina Mukhamedova — Shtudio (Sydney) — SEO and project coordination
+Only include people who are clearly and explicitly named in the source text. Never guess or infer names.
+
 Write in clear business English as structured paragraphs. If the source is a meeting transcript, write it as "In the [month/date] meeting, the team discussed..." Format it so someone reading it later can quickly understand what happened and what was decided.`;
 
 const MERGE_SYSTEM_PROMPT = `You are merging several segment summaries of the same business document into one coherent summary. Combine them into a single, flowing document without repeating information. Keep the date/time period prominent at the start. Preserve all clients, decisions, action items, strategies, and pricing details mentioned across all segments.`;
