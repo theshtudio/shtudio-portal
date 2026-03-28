@@ -81,8 +81,8 @@ export async function POST(request: NextRequest) {
   // ── Vector search ──────────────────────────────────────────────────────────
   const { data: chunks, error: rpcError } = await adminSupabase.rpc('match_kb_chunks', {
     query_embedding: formatVector(embedding),
-    match_threshold: 0.75,
-    match_count:     6,
+    match_threshold: 0.3,
+    match_count:     10,
     allowed_tiers:   ['general', 'sensitive', 'admin'],
   });
 
