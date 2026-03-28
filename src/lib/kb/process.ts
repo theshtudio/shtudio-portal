@@ -45,13 +45,13 @@ export async function processDocument(
   try {
     console.log('KB_PROCESS_START', { docId, fileName, chars: rawText.length });
 
-    // 1. Summarise raw text into structured business prose
-    const summary = await summariseDocument(rawText, docTitle);
+    // 1. Summarise raw text into structured business prose, and auto-categorise
+    const { summary, categories } = await summariseDocument(rawText, docTitle);
 
-    // Mark summarised immediately so partial failures don't re-run this step
+    // Mark summarised immediately and save auto-generated categories
     await supabase
       .from('kb_documents')
-      .update({ summarised: true })
+      .update({ summarised: true, category: categories || null })
       .eq('id', docId);
 
     // 2. Translate summary to English if needed

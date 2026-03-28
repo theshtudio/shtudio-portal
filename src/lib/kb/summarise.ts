@@ -1,5 +1,6 @@
 /**
- * Summarises a raw document into structured business prose using Claude Sonnet.
+ * Summarises a raw document into structured business prose using Claude Sonnet,
+ * then auto-generates category tags using Claude Haiku.
  *
  * For large documents (> SEGMENT_WORDS words) the text is summarised in
  * segments and then merged with one additional Claude call so the final
@@ -8,7 +9,8 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 
-const MODEL        = 'claude-sonnet-4-5';
+const MODEL         = 'claude-sonnet-4-5';
+const HAIKU_MODEL   = 'claude-haiku-4-5';
 const SEGMENT_WORDS = 3_000;
 
 const SYSTEM_PROMPT = `You are processing an internal business document for a digital marketing agency called Shtudio based in Sydney, Australia. Your job is to extract and summarise the key business information from this document into clean, structured prose that will be stored in a knowledge base and searched later.
@@ -43,6 +45,12 @@ Only include people who are clearly and explicitly named in the source text. Nev
 Write in clear business English as structured paragraphs. If the source is a meeting transcript, write it as "In the [month/date] meeting, the team discussed..." Format it so someone reading it later can quickly understand what happened and what was decided.`;
 
 const MERGE_SYSTEM_PROMPT = `You are merging several segment summaries of the same business document into one coherent summary. Combine them into a single, flowing document without repeating information. Keep the date/time period prominent at the start. Preserve all clients, decisions, action items, strategies, and pricing details mentioned across all segments.`;
+
+const CATEGORY_OPTIONS = [
+  'Meetings', 'Clients', 'SEO', 'Google Ads', 'Meta Ads', 'Development',
+  'Design', 'Operations', 'HR', 'Finance', 'Strategy', 'SOP', 'Hosting',
+  'Social Media', 'PPC', 'Branding',
+].join(', ');
 
 let _client: Anthropic | null = null;
 function getClient(): Anthropic {
@@ -110,36 +118,68 @@ async function mergeSegmentSummaries(
   return result;
 }
 
+async function categoriseDocument(summary: string): Promise<string> {
+  console.log('KB_CATEGORISE_START', { summaryChars: summary.length });
+
+  const message = await getClient().messages.create({
+    model:      HAIKU_MODEL,
+    max_tokens: 64,
+    messages:   [{
+      role:    'user',
+      content: `Based on this document summary, return a comma-separated list of 1-4 short category tags that best describe the content. Choose only from these options: ${CATEGORY_OPTIONS}. Return only the comma-separated tags, nothing else.\n\nSummary:\n${summary}`,
+    }],
+  });
+
+  const result = message.content
+    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+    .map((b) => b.text)
+    .join('')
+    .trim();
+
+  console.log('KB_CATEGORISE_DONE', { categories: result });
+  return result;
+}
+
+export interface SummariseResult {
+  summary:    string;
+  categories: string;
+}
+
 /**
- * Summarise `text` into structured business prose.
+ * Summarise `text` into structured business prose, then auto-categorise.
  *
- * - Short documents (≤ SEGMENT_WORDS words): single Claude call.
+ * - Short documents (≤ SEGMENT_WORDS words): single Sonnet call for summary.
  * - Long documents: summarised in SEGMENT_WORDS-word segments, then merged
- *   with a second Claude call to produce one coherent summary.
+ *   with a second Sonnet call to produce one coherent summary.
+ * - A final Haiku call generates comma-separated category tags from the summary.
  */
 export async function summariseDocument(
   text:  string,
   title: string,
-): Promise<string> {
+): Promise<SummariseResult> {
   console.log('KB_SUMMARISE_START', { title, chars: text.length });
 
   const words = text.trim().split(/\s+/);
 
+  let summary: string;
   if (words.length <= SEGMENT_WORDS) {
-    // Short document — single call
-    return summariseSegment(text, title, '1/1');
+    summary = await summariseSegment(text, title, '1/1');
+  } else {
+    // Long document — segment → merge
+    const segmentSummaries: string[] = [];
+    const total = Math.ceil(words.length / SEGMENT_WORDS);
+
+    for (let i = 0; i < words.length; i += SEGMENT_WORDS) {
+      const segNum  = Math.floor(i / SEGMENT_WORDS) + 1;
+      const segment = words.slice(i, i + SEGMENT_WORDS).join(' ');
+      const seg     = await summariseSegment(segment, title, `${segNum}/${total}`);
+      segmentSummaries.push(seg);
+    }
+
+    summary = await mergeSegmentSummaries(segmentSummaries, title);
   }
 
-  // Long document — segment → merge
-  const segmentSummaries: string[] = [];
-  const total = Math.ceil(words.length / SEGMENT_WORDS);
+  const categories = await categoriseDocument(summary);
 
-  for (let i = 0; i < words.length; i += SEGMENT_WORDS) {
-    const segNum   = Math.floor(i / SEGMENT_WORDS) + 1;
-    const segment  = words.slice(i, i + SEGMENT_WORDS).join(' ');
-    const summary  = await summariseSegment(segment, title, `${segNum}/${total}`);
-    segmentSummaries.push(summary);
-  }
-
-  return mergeSegmentSummaries(segmentSummaries, title);
+  return { summary, categories };
 }

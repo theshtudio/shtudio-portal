@@ -22,7 +22,6 @@ export function KbUploadPanel({ onUploaded }: KbUploadPanelProps) {
   const [file,       setFile]       = useState<File | null>(null);
   const [title,      setTitle]      = useState('');
   const [accessTier, setAccessTier] = useState('general');
-  const [category,   setCategory]   = useState('');
   const [dragging,   setDragging]   = useState(false);
   const [uploading,  setUploading]  = useState(false);
   const [uploadErr,  setUploadErr]  = useState('');
@@ -32,7 +31,6 @@ export function KbUploadPanel({ onUploaded }: KbUploadPanelProps) {
   const [qaTitle,      setQaTitle]      = useState('');
   const [qaContent,    setQaContent]    = useState('');
   const [qaAccessTier, setQaAccessTier] = useState('general');
-  const [qaCategory,   setQaCategory]   = useState('');
   const [qaSubmitting, setQaSubmitting] = useState(false);
   const [qaErr,        setQaErr]        = useState('');
 
@@ -73,7 +71,6 @@ export function KbUploadPanel({ onUploaded }: KbUploadPanelProps) {
     formData.append('file',        file);
     formData.append('title',       title.trim());
     formData.append('access_tier', accessTier);
-    formData.append('category',    category.trim());
 
     try {
       const res  = await fetch('/api/kb/ingest', { method: 'POST', body: formData });
@@ -83,7 +80,6 @@ export function KbUploadPanel({ onUploaded }: KbUploadPanelProps) {
       setFile(null);
       setTitle('');
       setAccessTier('general');
-      setCategory('');
       if (inputRef.current) inputRef.current.value = '';
       onUploaded(json.documentId);
     } catch (err: any) {
@@ -112,7 +108,6 @@ export function KbUploadPanel({ onUploaded }: KbUploadPanelProps) {
     formData.append('file',        fakeFile);
     formData.append('title',       qaTitle.trim());
     formData.append('access_tier', qaAccessTier);
-    formData.append('category',    qaCategory.trim());
 
     try {
       const res  = await fetch('/api/kb/ingest', { method: 'POST', body: formData });
@@ -122,7 +117,6 @@ export function KbUploadPanel({ onUploaded }: KbUploadPanelProps) {
       setQaTitle('');
       setQaContent('');
       setQaAccessTier('general');
-      setQaCategory('');
       onUploaded(json.documentId);
     } catch (err: any) {
       setQaErr(err.message);
@@ -226,20 +220,6 @@ export function KbUploadPanel({ onUploaded }: KbUploadPanelProps) {
             </select>
           </div>
 
-          {/* Category */}
-          <div className={styles.uploadField}>
-            <label className={styles.uploadLabel}>
-              Category <span className={styles.uploadOptional}>(optional)</span>
-            </label>
-            <input
-              className={styles.uploadInput}
-              type="text"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              placeholder="e.g. google-ads, onboarding, pricing"
-            />
-          </div>
-
           {uploadErr && <div className={styles.uploadError}>{uploadErr}</div>}
 
           <button type="submit" className={styles.uploadBtn} disabled={uploading || !file}>
@@ -294,20 +274,6 @@ export function KbUploadPanel({ onUploaded }: KbUploadPanelProps) {
                 <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </select>
-          </div>
-
-          {/* Category */}
-          <div className={styles.uploadField}>
-            <label className={styles.uploadLabel}>
-              Category <span className={styles.uploadOptional}>(optional)</span>
-            </label>
-            <input
-              className={styles.uploadInput}
-              type="text"
-              value={qaCategory}
-              onChange={(e) => setQaCategory(e.target.value)}
-              placeholder="e.g. google-ads, onboarding, pricing"
-            />
           </div>
 
           {qaErr && <div className={styles.uploadError}>{qaErr}</div>}
