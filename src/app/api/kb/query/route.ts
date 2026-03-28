@@ -78,8 +78,44 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Embedding failed' }, { status: 500 });
   }
 
+  // ── Period detection (e.g. "June 2024", "october 2024") ───────────────────
+  const periodMatch = question.match(
+    /\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{4})\b/i,
+  );
+
+  let periodChunks: any[] = [];
+  if (periodMatch) {
+    const period = `${periodMatch[1]} ${periodMatch[2]}`.toLowerCase(); // e.g. "june 2024"
+    console.log('KB_QUERY_PERIOD_DETECTED', { period });
+
+    // Find documents whose title contains the detected month+year
+    const { data: matchingDocs } = await adminSupabase
+      .from('kb_documents')
+      .select('id')
+      .ilike('title', `%${period}%`)
+      .eq('status', 'ready');
+
+    if (matchingDocs && matchingDocs.length > 0) {
+      const docIds = matchingDocs.map((d) => d.id);
+      console.log('KB_QUERY_PERIOD_DOCS', { period, docIds });
+
+      // Fetch chunks directly from those documents (up to 10)
+      const { data: directChunks } = await adminSupabase
+        .from('kb_chunks')
+        .select('id, content, document_id, chunk_index')
+        .in('document_id', docIds)
+        .order('chunk_index', { ascending: true })
+        .limit(10);
+
+      if (directChunks && directChunks.length > 0) {
+        periodChunks = directChunks;
+        console.log('KB_QUERY_PERIOD_CHUNKS', { period, count: periodChunks.length });
+      }
+    }
+  }
+
   // ── Vector search ──────────────────────────────────────────────────────────
-  const { data: chunks, error: rpcError } = await adminSupabase.rpc('match_kb_chunks', {
+  const { data: vectorChunks, error: rpcError } = await adminSupabase.rpc('match_kb_chunks', {
     query_embedding: formatVector(embedding),
     match_threshold: 0.3,
     match_count:     10,
@@ -91,7 +127,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: rpcError.message }, { status: 500 });
   }
 
-  const hadResults = Array.isArray(chunks) && chunks.length > 0;
+  // Merge: period chunks first, then vector results — deduplicated by chunk id
+  const seenIds = new Set<string>();
+  const chunks: any[] = [];
+  for (const c of [...periodChunks, ...(vectorChunks ?? [])]) {
+    if (!seenIds.has(c.id)) {
+      seenIds.add(c.id);
+      chunks.push(c);
+    }
+  }
+
+  const hadResults = chunks.length > 0;
 
   // ── Generate answer ────────────────────────────────────────────────────────
   // Always call Claude — even with an empty context — so the system prompt can
