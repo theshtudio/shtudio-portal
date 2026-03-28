@@ -8,7 +8,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 
-const MODEL        = 'claude-sonnet-4-5-20251001';
+const MODEL        = 'claude-sonnet-4-5';
 const SEGMENT_WORDS = 3_000;
 
 const SYSTEM_PROMPT = `You are processing an internal business document for a digital marketing agency called Shtudio based in Sydney, Australia. Your job is to extract and summarise the key business information from this document into clean, structured prose that will be stored in a knowledge base and searched later.
