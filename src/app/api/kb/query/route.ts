@@ -96,10 +96,41 @@ export async function POST(request: NextRequest) {
 
   const adminSupabase = createServiceSupabase();
 
-  // ── Embed the question ─────────────────────────────────────────────────────
+  // ── Build contextual search query ─────────────────────────────────────────
+  // If there's conversation history, ask Haiku to resolve pronouns and extract
+  // the real entity/intent so the embedding targets the right chunks.
+  let searchQuery = question;
+  if (history.length > 0) {
+    const recentHistory = history.slice(-4); // last 2 exchanges (4 messages)
+    const historyText = recentHistory
+      .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+      .join('\n');
+    try {
+      const queryRes = await anthropic.messages.create({
+        model:      'claude-haiku-4-5-20251001',
+        max_tokens: 32,
+        messages:   [{
+          role:    'user',
+          content: `Given this conversation history and follow-up question, write a single short search query (5-10 words max) that captures what information needs to be retrieved from a knowledge base. Extract specific names, clients, or entities from the history if the follow-up question uses pronouns like "their", "them", "they", "it".\n\nHistory:\n${historyText}\n\nFollow-up question: ${question}\n\nReturn only the search query, nothing else.`,
+        }],
+      });
+      const resolved = queryRes.content[0].type === 'text'
+        ? queryRes.content[0].text.trim()
+        : '';
+      if (resolved) {
+        searchQuery = resolved;
+        console.log('KB_QUERY_RESOLVED', { original: question, searchQuery });
+      }
+    } catch (err: any) {
+      // Non-fatal — fall back to raw question
+      console.warn('[POST /api/kb/query] query resolution failed, using raw question:', err.message);
+    }
+  }
+
+  // ── Embed the search query ─────────────────────────────────────────────────
   let embedding: number[];
   try {
-    embedding = await embedText(question);
+    embedding = await embedText(searchQuery);
   } catch (err: any) {
     console.error('[POST /api/kb/query] embed failed:', err.message);
     return NextResponse.json({ error: 'Embedding failed' }, { status: 500 });
