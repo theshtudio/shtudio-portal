@@ -81,6 +81,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
+  console.log('Received history:', JSON.stringify(history));
+
   if (!question) {
     return NextResponse.json({ error: '"question" is required' }, { status: 400 });
   }

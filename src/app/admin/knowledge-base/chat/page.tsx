@@ -80,10 +80,14 @@ export default function KbChatPage() {
     setLoading(true);
 
     try {
+      const requestBody = { question, history };
+      console.log('Sending history:', history);
+      console.log('Full request body:', JSON.stringify(requestBody));
+
       const res  = await fetch('/api/kb/query', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ question, history }),
+        body:    JSON.stringify(requestBody),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Request failed');
