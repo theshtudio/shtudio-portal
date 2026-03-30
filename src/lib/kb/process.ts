@@ -8,7 +8,8 @@
  * Pipeline steps:
  *   1. Fetch document metadata (access_tier, file_name) from kb_documents
  *   2. Summarise the raw text into structured business prose via Claude
- *   3. Translate the summary to English if not already English
+ *      (skipped when skipSummarise is true — raw text is used directly)
+ *   3. Translate the summary (or raw text) to English if not already English
  *   4. Chunk the translated text (~300 words per chunk, 30-word overlap)
  *   5. Embed all chunks via OpenAI text-embedding-ada-002 (1 chunk per call,
  *      2 000 ms delay between calls — see embed.ts for tuning constants)
@@ -25,10 +26,16 @@ import { translateToEnglish }    from './translate';
 import { chunkText }              from './chunk';
 import { embedBatch, formatVector } from './embed';
 
+export interface ProcessOptions {
+  skipSummarise?: boolean;
+}
+
 export async function processDocument(
   docId:   string,
   rawText: string,
+  options: ProcessOptions = {},
 ): Promise<void> {
+  const { skipSummarise = false } = options;
   const supabase = createServiceSupabase();
 
   // Fetch metadata we need for chunk rows
@@ -46,16 +53,25 @@ export async function processDocument(
     console.log('KB_PROCESS_START', { docId, fileName, chars: rawText.length });
 
     // 1. Summarise raw text into structured business prose, and auto-categorise
-    const { summary, categories } = await summariseDocument(rawText, docTitle);
+    //    — skip this step if the caller set skipSummarise (doc is already clean)
+    let textToProcess: string;
+    if (skipSummarise) {
+      console.log('KB_PROCESS_SKIP_SUMMARISE', { docId });
+      textToProcess = rawText;
+    } else {
+      const { summary, categories } = await summariseDocument(rawText, docTitle);
 
-    // Mark summarised immediately and save auto-generated categories
-    await supabase
-      .from('kb_documents')
-      .update({ summarised: true, category: categories || null })
-      .eq('id', docId);
+      // Mark summarised immediately and save auto-generated categories
+      await supabase
+        .from('kb_documents')
+        .update({ summarised: true, category: categories || null })
+        .eq('id', docId);
 
-    // 2. Translate summary to English if needed
-    const text = await translateToEnglish(summary);
+      textToProcess = summary;
+    }
+
+    // 2. Translate to English if needed
+    const text = await translateToEnglish(textToProcess);
 
     // 3. Chunk (~300 words, 30-word overlap — set in chunk.ts defaults)
     const chunks = chunkText(text);

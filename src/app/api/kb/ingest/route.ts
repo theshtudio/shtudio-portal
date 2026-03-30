@@ -33,10 +33,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid form data' }, { status: 400 });
   }
 
-  const file       = formData.get('file') as File | null;
-  const title      = (formData.get('title') as string | null)?.trim();
-  const accessTier = (formData.get('access_tier') as string) || 'general';
-  const category   = (formData.get('category') as string | null)?.trim() || null;
+  const file            = formData.get('file') as File | null;
+  const title           = (formData.get('title') as string | null)?.trim();
+  const accessTier      = (formData.get('access_tier') as string) || 'general';
+  const category        = (formData.get('category') as string | null)?.trim() || null;
+  const skipSummarise   = formData.get('skip_summarise') === 'true';
 
   // Validate
   if (!file)  return NextResponse.json({ error: 'No file provided' },    { status: 400 });
@@ -109,7 +110,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Fire-and-forget background processing via the shared helper
-  waitUntil(processDocument(doc.id, rawText));
+  waitUntil(processDocument(doc.id, rawText, { skipSummarise }));
 
   return NextResponse.json({ success: true, documentId: doc.id, status: 'processing' });
 }

@@ -789,3 +789,23 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* ── Skip summarisation checkbox ─────────────────────────────────────────── */
+.checkboxLabel {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: #d1d5db;
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.checkboxInput {
+  flex-shrink: 0;
+  margin-top: 2px;
+  accent-color: #6366f1;
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}

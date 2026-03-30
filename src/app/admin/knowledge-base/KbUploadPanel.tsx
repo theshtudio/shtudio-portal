@@ -19,20 +19,22 @@ export function KbUploadPanel({ onUploaded }: KbUploadPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('upload');
 
   // ── Upload File state ──────────────────────────────────────────────────────
-  const [file,       setFile]       = useState<File | null>(null);
-  const [title,      setTitle]      = useState('');
-  const [accessTier, setAccessTier] = useState('general');
-  const [dragging,   setDragging]   = useState(false);
-  const [uploading,  setUploading]  = useState(false);
-  const [uploadErr,  setUploadErr]  = useState('');
+  const [file,            setFile]            = useState<File | null>(null);
+  const [title,           setTitle]           = useState('');
+  const [accessTier,      setAccessTier]      = useState('general');
+  const [skipSummarise,   setSkipSummarise]   = useState(false);
+  const [dragging,        setDragging]        = useState(false);
+  const [uploading,       setUploading]       = useState(false);
+  const [uploadErr,       setUploadErr]       = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   // ── Quick Add state ────────────────────────────────────────────────────────
-  const [qaTitle,      setQaTitle]      = useState('');
-  const [qaContent,    setQaContent]    = useState('');
-  const [qaAccessTier, setQaAccessTier] = useState('general');
-  const [qaSubmitting, setQaSubmitting] = useState(false);
-  const [qaErr,        setQaErr]        = useState('');
+  const [qaTitle,          setQaTitle]          = useState('');
+  const [qaContent,        setQaContent]        = useState('');
+  const [qaAccessTier,     setQaAccessTier]     = useState('general');
+  const [qaSkipSummarise,  setQaSkipSummarise]  = useState(false);
+  const [qaSubmitting,     setQaSubmitting]     = useState(false);
+  const [qaErr,            setQaErr]            = useState('');
 
   // ── Upload File logic ──────────────────────────────────────────────────────
 
@@ -68,9 +70,10 @@ export function KbUploadPanel({ onUploaded }: KbUploadPanelProps) {
     setUploading(true);
 
     const formData = new FormData();
-    formData.append('file',        file);
-    formData.append('title',       title.trim());
-    formData.append('access_tier', accessTier);
+    formData.append('file',             file);
+    formData.append('title',            title.trim());
+    formData.append('access_tier',      accessTier);
+    formData.append('skip_summarise',   skipSummarise ? 'true' : 'false');
 
     try {
       const res  = await fetch('/api/kb/ingest', { method: 'POST', body: formData });
@@ -80,6 +83,7 @@ export function KbUploadPanel({ onUploaded }: KbUploadPanelProps) {
       setFile(null);
       setTitle('');
       setAccessTier('general');
+      setSkipSummarise(false);
       if (inputRef.current) inputRef.current.value = '';
       onUploaded(json.documentId);
     } catch (err: any) {
@@ -105,9 +109,10 @@ export function KbUploadPanel({ onUploaded }: KbUploadPanelProps) {
     const fakeFile = new File([qaContent.trim()], `${slug}.txt`, { type: 'text/plain' });
 
     const formData = new FormData();
-    formData.append('file',        fakeFile);
-    formData.append('title',       qaTitle.trim());
-    formData.append('access_tier', qaAccessTier);
+    formData.append('file',            fakeFile);
+    formData.append('title',           qaTitle.trim());
+    formData.append('access_tier',     qaAccessTier);
+    formData.append('skip_summarise',  qaSkipSummarise ? 'true' : 'false');
 
     try {
       const res  = await fetch('/api/kb/ingest', { method: 'POST', body: formData });
@@ -117,6 +122,7 @@ export function KbUploadPanel({ onUploaded }: KbUploadPanelProps) {
       setQaTitle('');
       setQaContent('');
       setQaAccessTier('general');
+      setQaSkipSummarise(false);
       onUploaded(json.documentId);
     } catch (err: any) {
       setQaErr(err.message);
@@ -220,6 +226,19 @@ export function KbUploadPanel({ onUploaded }: KbUploadPanelProps) {
             </select>
           </div>
 
+          {/* Skip summarisation */}
+          <div className={styles.uploadField}>
+            <label className={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={skipSummarise}
+                onChange={(e) => setSkipSummarise(e.target.checked)}
+                className={styles.checkboxInput}
+              />
+              Skip AI summarisation — this document is already clean/summarised
+            </label>
+          </div>
+
           {uploadErr && <div className={styles.uploadError}>{uploadErr}</div>}
 
           <button type="submit" className={styles.uploadBtn} disabled={uploading || !file}>
@@ -274,6 +293,19 @@ export function KbUploadPanel({ onUploaded }: KbUploadPanelProps) {
                 <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </select>
+          </div>
+
+          {/* Skip summarisation */}
+          <div className={styles.uploadField}>
+            <label className={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={qaSkipSummarise}
+                onChange={(e) => setQaSkipSummarise(e.target.checked)}
+                className={styles.checkboxInput}
+              />
+              Skip AI summarisation — this document is already clean/summarised
+            </label>
           </div>
 
           {qaErr && <div className={styles.uploadError}>{qaErr}</div>}
