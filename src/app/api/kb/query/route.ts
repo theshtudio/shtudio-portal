@@ -36,7 +36,18 @@ through this knowledge base. Try asking about business topics, client campaigns,
 processes instead."
 
 If you decline a question about compensation, rates, or fees, respond with exactly: \
-"Compensation and rate information is confidential and not available through this knowledge base."`;
+"Compensation and rate information is confidential and not available through this knowledge base."
+
+Always respond in plain conversational prose. Never use markdown formatting such as bold \
+(**text**), bullet points, headers, or asterisks in your responses. Write as if speaking \
+naturally to a colleague.`;
+
+const MAX_HISTORY = 6;
+
+interface HistoryMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
 
 export async function POST(request: NextRequest) {
   // ── Auth: logged-in admin only ─────────────────────────────────────────────
@@ -56,9 +67,16 @@ export async function POST(request: NextRequest) {
 
   // ── Parse body ─────────────────────────────────────────────────────────────
   let question: string;
+  let history: HistoryMessage[] = [];
   try {
     const body = await request.json();
     question = (body.question ?? '').trim();
+    if (Array.isArray(body.history)) {
+      // Cap to last MAX_HISTORY messages; validate shape minimally
+      history = (body.history as any[])
+        .filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+        .slice(-MAX_HISTORY);
+    }
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
@@ -150,11 +168,22 @@ export async function POST(request: NextRequest) {
     : '';
 
   try {
+    // Build the messages array: prior history + current turn
+    // The context is injected into the final user message only — it's the
+    // freshest retrieval result and previous turns already have their own context.
+    const historyMessages: Anthropic.MessageParam[] = history.map((m) => ({
+      role:    m.role,
+      content: m.content,
+    }));
+
     const response = await anthropic.messages.create({
       model:      'claude-haiku-4-5-20251001',
       max_tokens: 1024,
       system:     SYSTEM_PROMPT,
-      messages:   [{ role: 'user', content: `Context:\n${context}\n\nQuestion: ${question}` }],
+      messages:   [
+        ...historyMessages,
+        { role: 'user', content: `Context:\n${context}\n\nQuestion: ${question}` },
+      ],
     });
 
     answer = response.content[0].type === 'text'

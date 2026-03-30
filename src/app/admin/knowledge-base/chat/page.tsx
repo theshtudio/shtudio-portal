@@ -14,6 +14,11 @@ interface Message {
   queryId?: string | null;
 }
 
+interface HistoryEntry {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 type FlagStatus = 'idle' | 'open' | 'submitting' | 'submitted';
 interface FlagState { status: FlagStatus; comment: string; }
 
@@ -21,6 +26,7 @@ interface FlagState { status: FlagStatus; comment: string; }
 
 export default function KbChatPage() {
   const [messages,   setMessages]   = useState<Message[]>([]);
+  const [history,    setHistory]    = useState<HistoryEntry[]>([]);
   const [input,      setInput]      = useState('');
   const [loading,    setLoading]    = useState(false);
   const [flagStates, setFlagStates] = useState<Record<string, FlagState>>({});
@@ -77,20 +83,29 @@ export default function KbChatPage() {
       const res  = await fetch('/api/kb/query', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ question }),
+        body:    JSON.stringify({ question, history }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Request failed');
+
+      const assistantText = data.answer as string;
 
       setMessages((prev) => [
         ...prev,
         {
           id:         `a-${Date.now()}`,
           role:       'assistant',
-          text:       data.answer,
+          text:       assistantText,
           hadResults: data.hadResults,
           queryId:    data.queryId ?? null,
         },
+      ]);
+
+      // Append this exchange to history so follow-up questions have context
+      setHistory((prev) => [
+        ...prev,
+        { role: 'user',      content: question       },
+        { role: 'assistant', content: assistantText  },
       ]);
     } catch {
       setMessages((prev) => [
@@ -107,7 +122,7 @@ export default function KbChatPage() {
       setLoading(false);
       textareaRef.current?.focus();
     }
-  }, [input, loading]);
+  }, [input, loading, history]);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
