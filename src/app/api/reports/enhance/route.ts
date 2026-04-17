@@ -207,9 +207,51 @@ Use the .m-change.up / .m-change.down pill styles for positive/negative changes.
         }
       }
 
-      // SEO-specific instruction for backlinks
+      // SEO-specific instructions
       if (report.report_type === 'seo' || report.report_type === 'combined') {
-        reportTypeInstructions += `\n\nSEO BACKLINKS INSTRUCTION: For the backlinks and directories section, mention only the total number of new backlinks and directories built this month — do not list individual URLs. For example: 'This month we built 10 new backlinks across directories, forums and profile sites.' Never output the actual URLs in the client-facing report.`;
+        reportTypeInstructions += `
+
+SEO BACKLINKS INSTRUCTION: For the backlinks and directories section, mention only the total number of new backlinks and directories built this month — do not list individual URLs. For example: 'This month we built 10 new backlinks across directories, forums and profile sites.' Never output the actual URLs in the client-facing report.
+
+SEO SECTION COMPLETENESS — CRITICAL:
+Do NOT drop sections because they seem complex or detailed. Every section that exists in the source PDF must have a corresponding section in the HTML output, except raw link-dump lists (individual URLs for external articles, directories, ClickUp/Google Sheets internal links). The goal of simplification is cleaner layout and language — not fewer sections or less data.
+
+Render ALL of the following sections if the underlying data exists in the PDF:
+
+1. TRAFFIC BY CHANNEL TABLE
+   Extract the full GA4 channel breakdown table. Render an HTML <table> with columns: Channel, Total Users, New Users, Returning Users, Avg Engagement Time, Engaged Sessions, Event Count. Include all rows (Direct, Organic Search, Referral, Organic Social, Unassigned, etc.). Do not summarise or collapse rows.
+
+2. MONTH-ON-MONTH COMPARISON (if data present)
+   Render a table showing current period vs previous period with a % change column, for each channel. Follow it with a 2–3 sentence AI-written narrative interpreting the key changes (what improved, what declined, what to watch).
+
+3. YEAR-ON-YEAR COMPARISON (if data present)
+   Same structure as the MoM table but comparing to the same period last year. With narrative.
+
+4. SEARCH CONSOLE SECTION (if data present)
+   Show the 4 headline metrics as cards: Total Clicks, Total Impressions, Average CTR, Average Position — current period vs previous period with % change indicators. Add a short narrative paragraph. If click/impression trend data is available over the period, render a dual-axis Chart.js line chart (clicks on left axis, impressions on right axis) titled "Search Console: Clicks & Impressions". Use canvas id="chart-search-console".
+
+5. EXTERNAL OPTIMISATION — SEMRUSH METRICS
+   Render all available SEMrush metrics as cards in a responsive grid. Include: Authority Score (with label), Organic Traffic, Paid Traffic, Referring Domains, Traffic Share, Organic Keywords, Paid Keywords, Backlinks. Show % change / MoM change indicators where shown in the source. Do not drop metrics just because they are zero or unchanged.
+
+6. KEYWORD POSITION DISTRIBUTION CHART (if data present)
+   Render a Chart.js stacked bar or area chart showing keyword distribution across position brackets (Top 3, 4–10, 11–20, 21–50, 51–100) over the available time period (typically 6 months). Extract data values from the PDF as accurately as possible. Use canvas id="chart-keyword-positions". Title: "Keyword Position Distribution".
+
+7. REFERRING DOMAINS & BACKLINKS GROWTH CHARTS (if trend data present)
+   Render two Chart.js line charts side by side: one for Referring Domains growth over time, one for Total Backlinks growth over time. Extract values from the SEMrush trend charts in the PDF. Use canvas ids "chart-referring-domains" and "chart-backlinks-growth".
+
+8. WORK COMPLETED
+   Reproduce the full list verbatim from the PDF. Do not summarise, shorten, or omit any items. Render as a styled list or table.
+
+9. RECOMMENDATIONS
+   Reproduce in full, exactly as written in the PDF. Do not shorten.
+
+10. PLAN FOR NEXT MONTH
+    Reproduce in full, exactly as written in the PDF. Do not shorten.
+
+WHAT TO OMIT:
+- Individual URL dumps for external articles placed / backlinks built (mention counts only)
+- Internal document links (ClickUp tasks, Google Sheets links)
+- Raw "Other links" URL lists`;
       }
     }
 
