@@ -12,10 +12,11 @@ export default async function ClientDetailPage({
 }) {
   const { id } = await params;
   const supabase = await createServerSupabase();
-
   const { data: { user } } = await supabase.auth.getUser();
 
-  const { data: client } = await supabase
+  const adminSupabase = createServiceSupabase();
+
+  const { data: client } = await adminSupabase
     .from('clients')
     .select('*')
     .eq('id', id)
@@ -24,8 +25,6 @@ export default async function ClientDetailPage({
   if (!client) {
     return <div className={styles.notFound}>Client not found.</div>;
   }
-
-  const adminSupabase = createServiceSupabase();
 
   const [{ data: reports }, { data: profile }] = await Promise.all([
     adminSupabase
