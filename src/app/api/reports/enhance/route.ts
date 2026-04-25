@@ -355,8 +355,8 @@ Here is your design template:
     line-height: 1.6;
   }
 
-  h1, h2 { font-family: 'Dela Gothic One', sans-serif; }
-  h3, h4, .section-label, .subsection-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; }
+  h1, h2 { font-family: 'Dela Gothic One', sans-serif !important; }
+  h3, h4, .section-label, .subsection-title { font-family: 'Space Grotesk', sans-serif !important; font-weight: 700; }
 
   /* -- HEADER -- */
   .header {
@@ -901,6 +901,14 @@ Here is your design template:
 </html>
 
 Use this as your design template. Preserve all CSS exactly. Replace the content, data, client name, brand colours, and metrics with the data extracted from the attached document(s). Output only raw HTML with no markdown, no code fences, nothing else.
+
+TYPOGRAPHY INSTRUCTIONS — CRITICAL:
+The report uses three fonts loaded from Google Fonts. You MUST preserve these exactly:
+- Dela Gothic One — used for h1 and h2 elements only. This is a bold display font for major headings.
+- Space Grotesk 700 — used for h3, h4, .section-label, and .subsection-title. This is a bold sans-serif for subheadings and labels.
+- DM Sans — used for all body text, paragraphs, table content, card values, and navigation.
+- DM Serif Display — used only for the large decorative .section-title div text (e.g. "How did February go?").
+Do NOT change the font-family values in any CSS you generate. Do NOT add new @import or @font-face rules. Do NOT set font-family on h1–h4 elements in your generated CSS — the global rules in the template already handle this. If you add new CSS classes, do not include font-family declarations on heading elements.
 
 BRAND COLOUR INSTRUCTIONS:
 - IMPORTANT: Use the FIXED blue colour scheme for ALL reports regardless of client. Do NOT change the CSS variables to match client brand colours. The variables are: --primary (#2B6CB8), --primary-light (#4A90D9), --primary-dark (#1A4A8A), --accent (#F26522 — Shtudio orange).
