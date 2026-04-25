@@ -49,7 +49,7 @@ export function ClientReports({ clientId, initialReports, canDelete }: ClientRep
 
   const typeOptions = useMemo(() => {
     const seen = new Set<string>();
-    reports.forEach((r) => { if (r.report_type) seen.add(r.report_type); });
+    reports.forEach((r) => { if (r.report_type && r.report_type !== 'pre-formatted') seen.add(r.report_type); });
     return Array.from(seen).sort();
   }, [reports]);
 

@@ -458,8 +458,8 @@ export default function UploadReportPage() {
     e.preventDefault();
 
     if (isPreFormatted) {
-      if (files.length === 0 || !selectedClient || !title) {
-        setError('Please fill all required fields and upload an HTML file.');
+      if (!reportType || files.length === 0 || !selectedClient || !title) {
+        setError('Please select a service type, upload an HTML file, and fill all required fields.');
         return;
       }
 
@@ -478,7 +478,7 @@ export default function UploadReportPage() {
             title,
             period_start: periodStart || null,
             period_end: periodEnd || null,
-            report_type: 'pre-formatted',
+            report_type: reportType,
             ai_enhanced_html: htmlContent,
           }),
         });
@@ -648,6 +648,23 @@ export default function UploadReportPage() {
 
         {isPreFormatted ? (
           <>
+            {/* Service type selector */}
+            <div className={styles.field}>
+              <label className={styles.label}>Service Type *</label>
+              <div className={styles.typeGrid}>
+                {ALL_REPORT_TYPE_BUTTONS.map((rt) => (
+                  <button
+                    key={rt.key}
+                    type="button"
+                    className={`${styles.typeBtn} ${reportType === rt.key ? styles.typeBtnActive : ''}`}
+                    onClick={() => setReportType(rt.key)}
+                  >
+                    {rt.displayName}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Pre-formatted: HTML file upload */}
             <div className={styles.field}>
               <label className={styles.label}>HTML Report File *</label>

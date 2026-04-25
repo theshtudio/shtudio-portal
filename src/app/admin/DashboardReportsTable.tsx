@@ -43,7 +43,7 @@ export function DashboardReportsTable({ initialReports, clients }: DashboardRepo
 
   const typeOptions = useMemo(() => {
     const seen = new Set<string>();
-    initialReports.forEach((r) => { if (r.report_type) seen.add(r.report_type); });
+    initialReports.forEach((r) => { if (r.report_type && r.report_type !== 'pre-formatted') seen.add(r.report_type); });
     return Array.from(seen).sort();
   }, [initialReports]);
 
