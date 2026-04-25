@@ -112,24 +112,37 @@ async function processReport(reportId: string, report: any) {
       return;
     }
 
-    // Download selected client files (if any)
+    // Download ALL client files for this client as context
     const clientFileBlocks: any[] = [];
-    const clientFileIds: string[] = report.client_file_ids || [];
 
-    if (clientFileIds.length > 0) {
-      const { data: clientFiles } = await supabase
-        .from('client_files')
-        .select('*')
-        .in('id', clientFileIds);
+    const { data: allClientFiles } = await supabase
+      .from('client_files')
+      .select('id, file_name, file_label, file_path, file_type')
+      .eq('client_id', report.client_id)
+      .order('created_at', { ascending: true });
 
-      if (clientFiles) {
-        for (const cf of clientFiles) {
-          const block = await downloadAsDocBlock(supabase, 'client-files', cf.file_path);
-          if (block) {
+    if (allClientFiles && allClientFiles.length > 0) {
+      for (const cf of allClientFiles) {
+        const block = await downloadAsDocBlock(supabase, 'client-files', cf.file_path);
+        if (block) {
+          const displayName = cf.file_label || cf.file_name;
+          // Wrap the block with a label so Claude knows what each file is
+          if (block.type === 'text') {
+            clientFileBlocks.push({
+              type: 'text',
+              text: `[CLIENT FILE: ${displayName}]\n\n${block.text}`,
+            });
+          } else {
+            // For document blocks (PDF, etc.), prepend a text label then the document
+            clientFileBlocks.push({
+              type: 'text',
+              text: `[CLIENT FILE: ${displayName}]`,
+            });
             clientFileBlocks.push(block);
           }
         }
       }
+      console.log(`Loaded ${clientFileBlocks.length} content blocks from ${allClientFiles.length} client files`);
     }
 
     // Fetch last 6 completed reports for richer historical context
@@ -269,8 +282,8 @@ Your task is to produce a complete, self-contained HTML file for ${clientName}${
 
 NOTE: Multiple report files have been attached. Use data from ALL of them to build a comprehensive report.` : ''}${clientFileBlocks.length > 0 ? `
 
-ADDITIONAL CONTEXT FILES:
-The following additional files from the client's file library have been included for context (e.g. brand guidelines, strategy docs, previous data). Use them to inform your analysis and recommendations where relevant.` : ''}
+CLIENT CONTEXT FILES:
+The following client files contain historical data and background context for this client. Use them to provide comparisons and context in the report where relevant — for example, CSV exports of past SEO or GBP metrics, brand guidelines, or strategy documents. Cross-reference this data with the current report period data to highlight trends, changes, and insights.` : ''}
 
 CHART GENERATION INSTRUCTIONS:
 Where the data supports it, generate interactive Chart.js charts embedded directly in the HTML.
