@@ -29,7 +29,10 @@ export function ClientFiles({ clientId }: ClientFilesProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [label, setLabel] = useState('');
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [canDelete, setCanDelete] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showModal, setShowModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function loadFiles() {
@@ -38,6 +41,7 @@ export function ClientFiles({ clientId }: ClientFilesProps) {
       if (res.ok) {
         const data = await res.json();
         setFiles(data.files || []);
+        setCanDelete(data.canDelete === true);
       }
     } catch {
       // Ignore
@@ -53,13 +57,10 @@ export function ClientFiles({ clientId }: ClientFilesProps) {
   async function handleUpload(file: File) {
     setUploading(true);
     setError('');
-
     try {
       const formData = new FormData();
       formData.append('file', file);
-      if (label.trim()) {
-        formData.append('label', label.trim());
-      }
+      if (label.trim()) formData.append('label', label.trim());
 
       const res = await fetch(`/api/clients/${clientId}/files`, {
         method: 'POST',
@@ -82,32 +83,54 @@ export function ClientFiles({ clientId }: ClientFilesProps) {
     }
   }
 
-  async function handleDelete(fileId: string) {
-    if (!confirm('Delete this file? This cannot be undone.')) return;
-
-    setDeletingId(fileId);
-    try {
-      const res = await fetch(`/api/clients/${clientId}/files/${fileId}`, {
-        method: 'DELETE',
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Delete failed');
-      }
-
-      setFiles((prev) => prev.filter((f) => f.id !== fileId));
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete file');
-    } finally {
-      setDeletingId(null);
-    }
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
+
+  async function confirmDelete() {
+    setDeleting(true);
+    setError('');
+    const ids = Array.from(selectedIds);
+
+    for (const fileId of ids) {
+      try {
+        const res = await fetch(`/api/clients/${clientId}/files/${fileId}`, {
+          method: 'DELETE',
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || 'Delete failed');
+        }
+      } catch (err: any) {
+        setError(err.message || 'Failed to delete one or more files');
+      }
+    }
+
+    setFiles((prev) => prev.filter((f) => !ids.includes(f.id)));
+    setSelectedIds(new Set());
+    setShowModal(false);
+    setDeleting(false);
+  }
+
+  const selectedFiles = files.filter((f) => selectedIds.has(f.id));
 
   return (
     <div className={styles.section}>
       <div className={styles.sectionHeader}>
         <h2 className={styles.sectionTitle}>Client Files</h2>
+        {canDelete && selectedIds.size > 0 && (
+          <button
+            className={styles.deleteSelectedBtn}
+            onClick={() => setShowModal(true)}
+          >
+            Delete Selected ({selectedIds.size})
+          </button>
+        )}
       </div>
 
       <p className={styles.description}>
@@ -133,11 +156,7 @@ export function ClientFiles({ clientId }: ClientFilesProps) {
             if (e.target.files?.[0]) handleUpload(e.target.files[0]);
           }}
         />
-        <Button
-          size="sm"
-          onClick={() => fileInputRef.current?.click()}
-          loading={uploading}
-        >
+        <Button size="sm" onClick={() => fileInputRef.current?.click()} loading={uploading}>
           Upload File
         </Button>
       </div>
@@ -149,12 +168,21 @@ export function ClientFiles({ clientId }: ClientFilesProps) {
       ) : (
         <div className={styles.fileList}>
           {files.map((file) => (
-            <div key={file.id} className={styles.fileRow}>
+            <div
+              key={file.id}
+              className={`${styles.fileRow} ${selectedIds.has(file.id) ? styles.fileRowSelected : ''}`}
+            >
+              {canDelete && (
+                <input
+                  type="checkbox"
+                  className={styles.fileCheckbox}
+                  checked={selectedIds.has(file.id)}
+                  onChange={() => toggleSelect(file.id)}
+                />
+              )}
               <span className={styles.fileIcon}>{fileIcon(file.file_type)}</span>
               <div className={styles.fileInfo}>
-                <span className={styles.fileName}>
-                  {file.file_label || file.file_name}
-                </span>
+                <span className={styles.fileName}>{file.file_label || file.file_name}</span>
                 {file.file_label && file.file_label !== file.file_name && (
                   <span className={styles.fileOriginal}>{file.file_name}</span>
                 )}
@@ -164,21 +192,44 @@ export function ClientFiles({ clientId }: ClientFilesProps) {
               </span>
               <span className={styles.fileDate}>
                 {new Date(file.created_at).toLocaleDateString('en-GB', {
-                  day: '2-digit',
-                  month: 'short',
-                  year: 'numeric',
+                  day: '2-digit', month: 'short', year: 'numeric',
                 })}
               </span>
-              <button
-                className={styles.deleteBtn}
-                onClick={() => handleDelete(file.id)}
-                disabled={deletingId === file.id}
-                title="Delete file"
-              >
-                {deletingId === file.id ? '...' : '✕'}
-              </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Confirmation modal */}
+      {showModal && (
+        <div className={styles.modalOverlay} onClick={() => !deleting && setShowModal(false)}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <h3 className={styles.modalTitle}>Delete Files</h3>
+            <p className={styles.modalBody}>
+              Are you sure you want to permanently delete these files? This cannot be undone.
+            </p>
+            <ul className={styles.modalFileList}>
+              {selectedFiles.map((f) => (
+                <li key={f.id}>{f.file_label || f.file_name}</li>
+              ))}
+            </ul>
+            <div className={styles.modalActions}>
+              <button
+                className={styles.modalCancelBtn}
+                onClick={() => setShowModal(false)}
+                disabled={deleting}
+              >
+                Cancel
+              </button>
+              <button
+                className={styles.modalDeleteBtn}
+                onClick={confirmDelete}
+                disabled={deleting}
+              >
+                {deleting ? 'Deleting...' : 'Yes, Delete Permanently'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

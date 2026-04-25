@@ -18,6 +18,12 @@ export async function GET(
 
   const adminSupabase = createServiceSupabase();
 
+  const { data: profile } = await adminSupabase
+    .from('profiles')
+    .select('role, can_delete_files')
+    .eq('id', user.id)
+    .single();
+
   const { data: files, error } = await adminSupabase
     .from('client_files')
     .select('*')
@@ -28,7 +34,9 @@ export async function GET(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ files: files || [] });
+  const canDelete = profile?.role === 'admin' && profile?.can_delete_files === true;
+
+  return NextResponse.json({ files: files || [], canDelete });
 }
 
 export async function POST(

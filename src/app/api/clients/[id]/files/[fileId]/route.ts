@@ -15,17 +15,17 @@ export async function DELETE(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { data: profile } = await supabase
+  const adminSupabase = createServiceSupabase();
+
+  const { data: profile } = await adminSupabase
     .from('profiles')
-    .select('role')
+    .select('role, can_delete_files')
     .eq('id', user.id)
     .single();
 
-  if (!profile || profile.role !== 'admin') {
+  if (!profile || profile.role !== 'admin' || !profile.can_delete_files) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
-
-  const adminSupabase = createServiceSupabase();
 
   // Get the file record first to find the storage path
   const { data: fileRecord, error: fetchError } = await adminSupabase
@@ -58,6 +58,19 @@ export async function DELETE(
   if (deleteError) {
     return NextResponse.json({ error: deleteError.message }, { status: 500 });
   }
+
+  // Audit log
+  await adminSupabase.from('audit_log').insert({
+    user_id: user.id,
+    action: 'delete_file',
+    resource_type: 'client_file',
+    resource_id: fileId,
+    metadata: {
+      file_name: fileRecord.file_name,
+      file_label: fileRecord.file_label,
+      client_id: clientId,
+    },
+  });
 
   return NextResponse.json({ success: true });
 }
