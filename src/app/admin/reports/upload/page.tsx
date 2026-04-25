@@ -33,6 +33,9 @@ const ACCEPTED_TYPES = [
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ];
 
+const HTML_ACCEPTED_EXTENSIONS = '.html,.htm';
+const HTML_ACCEPTED_TYPES = ['text/html'];
+
 function parseFilename(filename: string) {
   const name = filename.replace(/\.(pdf|docx?|xlsx?)$/i, '').trim();
 
@@ -132,6 +135,9 @@ export default function UploadReportPage() {
   const [combinedGroups, setCombinedGroups] = useState<
     { platform: string; key: ReportType; options: ReportOption[] }[]
   >([]);
+
+  // Pre-formatted HTML mode
+  const [isPreFormatted, setIsPreFormatted] = useState(false);
 
   // Client files
   const [clientFiles, setClientFiles] = useState<ClientFile[]>([]);
@@ -309,8 +315,28 @@ export default function UploadReportPage() {
     return ACCEPTED_TYPES.includes(file.type);
   }
 
+  function isAcceptedHtmlFile(file: File): boolean {
+    return HTML_ACCEPTED_TYPES.includes(file.type) || file.name.match(/\.(html|htm)$/i) !== null;
+  }
+
   // Auto-fill from first filename when files are selected
   const handleFilesSelected = useCallback((selected: File[]) => {
+    if (isPreFormatted) {
+      const valid = selected.filter(isAcceptedHtmlFile);
+      if (valid.length === 0) {
+        setError('Only HTML files are accepted in pre-formatted mode.');
+        return;
+      }
+      setFiles([valid[0]]);
+      if (!title && valid[0]) {
+        const parsed = parseFilename(valid[0].name);
+        if (parsed.title) { setTitle(parsed.title); setAutoFilled(prev => ({ ...prev, title: true })); }
+        if (parsed.periodStart) { setPeriodStart(parsed.periodStart); setAutoFilled(prev => ({ ...prev, periodStart: true })); }
+        if (parsed.periodEnd) { setPeriodEnd(parsed.periodEnd); setAutoFilled(prev => ({ ...prev, periodEnd: true })); }
+      }
+      return;
+    }
+
     const valid = selected.filter(isAcceptedFile);
     if (valid.length === 0) {
       setError('Only PDF, Word, and Excel files are accepted.');
@@ -342,7 +368,7 @@ export default function UploadReportPage() {
 
       setAutoFilled(filled);
     }
-  }, [title]);
+  }, [title, isPreFormatted]);
 
   function removeFile(index: number) {
     setFiles((prev) => prev.filter((_, i) => i !== index));
@@ -430,6 +456,47 @@ export default function UploadReportPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    if (isPreFormatted) {
+      if (files.length === 0 || !selectedClient || !title) {
+        setError('Please fill all required fields and upload an HTML file.');
+        return;
+      }
+
+      setError('');
+      setLoading(true);
+      startProgress();
+
+      try {
+        const htmlContent = await files[0].text();
+
+        const res = await fetch('/api/reports/create-preformatted', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            client_id: selectedClient,
+            title,
+            period_start: periodStart || null,
+            period_end: periodEnd || null,
+            report_type: 'pre-formatted',
+            ai_enhanced_html: htmlContent,
+          }),
+        });
+
+        const { report, error: apiError } = await res.json();
+        if (!res.ok) throw new Error(apiError || 'Failed to create report');
+
+        stopProgress(true);
+        router.push(`/admin/reports/${report.id}`);
+        router.refresh();
+      } catch (err: any) {
+        stopProgress(false);
+        setError(err.message || 'Failed to upload report.');
+        setLoading(false);
+      }
+      return;
+    }
+
     if (!reportType) {
       setError('Please select a report type.');
       return;
@@ -560,121 +627,30 @@ export default function UploadReportPage() {
       <form className={styles.form} onSubmit={handleSubmit}>
         {error && <div className={styles.error}>{error}</div>}
 
-        {/* Step 1 — Report Type Selector */}
+        {/* Pre-formatted HTML toggle */}
         <div className={styles.field}>
-          <label className={styles.label}>Report Type *</label>
-          <div className={styles.typeGrid}>
-            {ALL_REPORT_TYPE_BUTTONS.map((rt) => (
-              <button
-                key={rt.key}
-                type="button"
-                className={`${styles.typeBtn} ${reportType === rt.key ? styles.typeBtnActive : ''}`}
-                onClick={() => handleReportTypeChange(rt.key)}
-              >
-                {rt.displayName}
-              </button>
-            ))}
-          </div>
+          <label className={styles.optionCheck}>
+            <input
+              type="checkbox"
+              checked={isPreFormatted}
+              onChange={(e) => {
+                setIsPreFormatted(e.target.checked);
+                setFiles([]);
+                setReportType(null);
+                setError('');
+              }}
+            />
+            <span className={styles.optionLabel}>
+              This report is already formatted HTML — skip AI processing
+            </span>
+          </label>
         </div>
 
-        {/* Rest of the form only shows after type is selected */}
-        {reportType && (
+        {isPreFormatted ? (
           <>
-            {/* Combined: platform selector sub-step */}
-            {reportType === 'combined' && (
-              <div className={styles.field}>
-                <label className={styles.label}>Select platforms to include:</label>
-                <div className={styles.platformPills}>
-                  {REPORT_TYPES.map((rt) => (
-                    <button
-                      key={rt.key}
-                      type="button"
-                      className={`${styles.platformPill} ${selectedPlatforms.includes(rt.key) ? styles.platformPillActive : ''}`}
-                      onClick={() => togglePlatform(rt.key)}
-                    >
-                      {rt.displayName}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Step 2 — Dynamic Section Checkboxes */}
-            {(reportType !== 'combined' || selectedPlatforms.length > 0) && (
+            {/* Pre-formatted: HTML file upload */}
             <div className={styles.field}>
-              <label className={styles.label}>Report Sections</label>
-              <p className={styles.fieldHint}>
-                Pre-selected options are recommended defaults — adjust as needed.
-              </p>
-
-              {reportType === 'combined' ? (
-                <div className={styles.optionsGrouped}>
-                  {combinedGroups.map((group, gi) => (
-                    <div key={group.platform} className={styles.optionsGroup}>
-                      <div className={styles.optionsGroupTitle}>{group.platform}</div>
-                      {group.options.map((opt, oi) => (
-                        <label key={opt.label} className={styles.optionCheck}>
-                          <input
-                            type="checkbox"
-                            checked={opt.checked}
-                            onChange={() => toggleCombinedOption(gi, oi)}
-                          />
-                          <span className={styles.optionLabel}>
-                            {opt.label}
-                            {opt.adminOnly && (
-                              <span className={styles.adminBadge}>Admin only</span>
-                            )}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className={styles.optionsList}>
-                  {sectionOptions.map((opt, i) => (
-                    <label key={opt.label} className={styles.optionCheck}>
-                      <input
-                        type="checkbox"
-                        checked={opt.checked}
-                        onChange={() => toggleSectionOption(i)}
-                      />
-                      <span className={styles.optionLabel}>
-                        {opt.label}
-                        {opt.adminOnly && (
-                          <span className={styles.adminBadge}>Admin only</span>
-                        )}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-            )}
-
-            {/* Global Options */}
-            <div className={styles.field}>
-              <label className={styles.label}>Global Options</label>
-              <div className={styles.optionsList}>
-                {globalOptions.map((opt, i) => (
-                  <label key={opt.label} className={styles.optionCheck}>
-                    <input
-                      type="checkbox"
-                      checked={opt.checked}
-                      onChange={() => toggleGlobalOption(i)}
-                    />
-                    <span className={styles.optionLabel}>{opt.label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* File Upload */}
-            <div className={styles.field}>
-              <label className={styles.label}>
-                Report Files *
-                <HelpTooltip text="Upload the raw PDF or export from Google Ads, GA, or other platforms. Multiple files can be combined into one report." />
-              </label>
+              <label className={styles.label}>HTML Report File *</label>
               <div
                 className={`${styles.dropzone} ${dragActive ? styles.dropzoneActive : ''}`}
                 onDragEnter={handleDrag}
@@ -683,17 +659,16 @@ export default function UploadReportPage() {
                 onDrop={handleDrop}
                 onClick={() => fileInputRef.current?.click()}
               >
-                <div className={styles.dropzoneIcon}>📄</div>
+                <div className={styles.dropzoneIcon}>🌐</div>
                 <div className={styles.dropzoneText}>
-                  Drag and drop your files here, or{' '}
+                  Drag and drop your HTML file here, or{' '}
                   <span className={styles.dropzoneHighlight}>click to browse</span>
                 </div>
-                <div className={styles.dropzoneHint}>PDF, Word, or Excel files</div>
+                <div className={styles.dropzoneHint}>HTML files only (.html, .htm)</div>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept={ACCEPTED_EXTENSIONS}
-                  multiple
+                  accept={HTML_ACCEPTED_EXTENSIONS}
                   style={{ display: 'none' }}
                   onChange={(e) => {
                     if (e.target.files?.length) {
@@ -708,10 +683,7 @@ export default function UploadReportPage() {
                 <div className={styles.fileList}>
                   {files.map((file, i) => (
                     <div key={`${file.name}-${i}`} className={styles.fileItem}>
-                      <span className={styles.fileItemIcon}>
-                        {file.type === 'application/pdf' ? '📕' :
-                         file.type.includes('word') ? '📘' : '📗'}
-                      </span>
+                      <span className={styles.fileItemIcon}>🌐</span>
                       <span className={styles.fileItemName}>{file.name}</span>
                       <span className={styles.fileItemSize}>{formatFileSize(file.size)}</span>
                       <button
@@ -744,44 +716,6 @@ export default function UploadReportPage() {
               </select>
             </div>
 
-            {/* Client Files Checklist */}
-            {selectedClient && clientFiles.length > 0 && (
-              <div className={styles.field}>
-                <label className={styles.label}>
-                  Include Client Files as Context
-                  <HelpTooltip text="Upload historical reports, ad exports, or analytics data. These are summarised once and used automatically in future reports for better comparisons." />
-                </label>
-                <p className={styles.fieldHint}>
-                  Select files from the client library to include as additional context for Claude.
-                </p>
-                <div className={styles.clientFilesList}>
-                  {clientFiles.map((cf) => (
-                    <label key={cf.id} className={styles.clientFileCheck}>
-                      <input
-                        type="checkbox"
-                        checked={selectedClientFileIds.includes(cf.id)}
-                        onChange={() => toggleClientFile(cf.id)}
-                      />
-                      <span className={styles.clientFileInfo}>
-                        <span className={styles.clientFileName}>
-                          {cf.file_label || cf.file_name}
-                        </span>
-                        {cf.file_label && cf.file_label !== cf.file_name && (
-                          <span className={styles.clientFileOriginal}>{cf.file_name}</span>
-                        )}
-                        {cf.file_size && (
-                          <span className={styles.clientFileSize}>{formatFileSize(cf.file_size)}</span>
-                        )}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-            {selectedClient && loadingClientFiles && (
-              <div className={styles.fieldHint}>Loading client files...</div>
-            )}
-
             <Input
               label="Report Title *"
               value={title}
@@ -808,28 +742,289 @@ export default function UploadReportPage() {
               />
             </div>
 
-            <div className={styles.field}>
-              <label className={styles.label}>
-                Custom Instructions for AI (optional)
-                <HelpTooltip text="Add specific goals, tone preferences, or metrics to highlight. E.g. 'Client is focused on ROAS, emphasise cost efficiency. Keep language simple — client is not technical.'" />
-              </label>
-              <textarea
-                className={styles.textarea}
-                value={customInstructions}
-                onChange={(e) => setCustomInstructions(e.target.value)}
-                placeholder="e.g. Emphasise ROAS performance, suggest budget increases for top campaigns, keep language simple for non-technical clients..."
-                rows={3}
-              />
-            </div>
-
             <div className={styles.actions}>
               <Button type="submit">
-                Upload & Process
+                Upload Report
               </Button>
               <Button type="button" variant="secondary" onClick={() => router.back()}>
                 Cancel
               </Button>
             </div>
+          </>
+        ) : (
+          <>
+            {/* Step 1 — Report Type Selector */}
+            <div className={styles.field}>
+              <label className={styles.label}>Report Type *</label>
+              <div className={styles.typeGrid}>
+                {ALL_REPORT_TYPE_BUTTONS.map((rt) => (
+                  <button
+                    key={rt.key}
+                    type="button"
+                    className={`${styles.typeBtn} ${reportType === rt.key ? styles.typeBtnActive : ''}`}
+                    onClick={() => handleReportTypeChange(rt.key)}
+                  >
+                    {rt.displayName}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Rest of the form only shows after type is selected */}
+            {reportType && (
+              <>
+                {/* Combined: platform selector sub-step */}
+                {reportType === 'combined' && (
+                  <div className={styles.field}>
+                    <label className={styles.label}>Select platforms to include:</label>
+                    <div className={styles.platformPills}>
+                      {REPORT_TYPES.map((rt) => (
+                        <button
+                          key={rt.key}
+                          type="button"
+                          className={`${styles.platformPill} ${selectedPlatforms.includes(rt.key) ? styles.platformPillActive : ''}`}
+                          onClick={() => togglePlatform(rt.key)}
+                        >
+                          {rt.displayName}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 2 — Dynamic Section Checkboxes */}
+                {(reportType !== 'combined' || selectedPlatforms.length > 0) && (
+                  <div className={styles.field}>
+                    <label className={styles.label}>Report Sections</label>
+                    <p className={styles.fieldHint}>
+                      Pre-selected options are recommended defaults — adjust as needed.
+                    </p>
+
+                    {reportType === 'combined' ? (
+                      <div className={styles.optionsGrouped}>
+                        {combinedGroups.map((group, gi) => (
+                          <div key={group.platform} className={styles.optionsGroup}>
+                            <div className={styles.optionsGroupTitle}>{group.platform}</div>
+                            {group.options.map((opt, oi) => (
+                              <label key={opt.label} className={styles.optionCheck}>
+                                <input
+                                  type="checkbox"
+                                  checked={opt.checked}
+                                  onChange={() => toggleCombinedOption(gi, oi)}
+                                />
+                                <span className={styles.optionLabel}>
+                                  {opt.label}
+                                  {opt.adminOnly && (
+                                    <span className={styles.adminBadge}>Admin only</span>
+                                  )}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className={styles.optionsList}>
+                        {sectionOptions.map((opt, i) => (
+                          <label key={opt.label} className={styles.optionCheck}>
+                            <input
+                              type="checkbox"
+                              checked={opt.checked}
+                              onChange={() => toggleSectionOption(i)}
+                            />
+                            <span className={styles.optionLabel}>
+                              {opt.label}
+                              {opt.adminOnly && (
+                                <span className={styles.adminBadge}>Admin only</span>
+                              )}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Global Options */}
+                <div className={styles.field}>
+                  <label className={styles.label}>Global Options</label>
+                  <div className={styles.optionsList}>
+                    {globalOptions.map((opt, i) => (
+                      <label key={opt.label} className={styles.optionCheck}>
+                        <input
+                          type="checkbox"
+                          checked={opt.checked}
+                          onChange={() => toggleGlobalOption(i)}
+                        />
+                        <span className={styles.optionLabel}>{opt.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* File Upload */}
+                <div className={styles.field}>
+                  <label className={styles.label}>
+                    Report Files *
+                    <HelpTooltip text="Upload the raw PDF or export from Google Ads, GA, or other platforms. Multiple files can be combined into one report." />
+                  </label>
+                  <div
+                    className={`${styles.dropzone} ${dragActive ? styles.dropzoneActive : ''}`}
+                    onDragEnter={handleDrag}
+                    onDragLeave={handleDrag}
+                    onDragOver={handleDrag}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <div className={styles.dropzoneIcon}>📄</div>
+                    <div className={styles.dropzoneText}>
+                      Drag and drop your files here, or{' '}
+                      <span className={styles.dropzoneHighlight}>click to browse</span>
+                    </div>
+                    <div className={styles.dropzoneHint}>PDF, Word, or Excel files</div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept={ACCEPTED_EXTENSIONS}
+                      multiple
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        if (e.target.files?.length) {
+                          handleFilesSelected(Array.from(e.target.files));
+                          e.target.value = '';
+                        }
+                      }}
+                    />
+                  </div>
+
+                  {files.length > 0 && (
+                    <div className={styles.fileList}>
+                      {files.map((file, i) => (
+                        <div key={`${file.name}-${i}`} className={styles.fileItem}>
+                          <span className={styles.fileItemIcon}>
+                            {file.type === 'application/pdf' ? '📕' :
+                             file.type.includes('word') ? '📘' : '📗'}
+                          </span>
+                          <span className={styles.fileItemName}>{file.name}</span>
+                          <span className={styles.fileItemSize}>{formatFileSize(file.size)}</span>
+                          <button
+                            type="button"
+                            className={styles.fileItemRemove}
+                            onClick={(e) => { e.stopPropagation(); removeFile(i); }}
+                            title="Remove file"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Client Selector */}
+                <div className={styles.field}>
+                  <label className={styles.label}>Client *</label>
+                  <select
+                    className={styles.select}
+                    value={selectedClient}
+                    onChange={(e) => setSelectedClient(e.target.value)}
+                    required
+                  >
+                    <option value="">Select a client...</option>
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Client Files Checklist */}
+                {selectedClient && clientFiles.length > 0 && (
+                  <div className={styles.field}>
+                    <label className={styles.label}>
+                      Include Client Files as Context
+                      <HelpTooltip text="Upload historical reports, ad exports, or analytics data. These are summarised once and used automatically in future reports for better comparisons." />
+                    </label>
+                    <p className={styles.fieldHint}>
+                      Select files from the client library to include as additional context for Claude.
+                    </p>
+                    <div className={styles.clientFilesList}>
+                      {clientFiles.map((cf) => (
+                        <label key={cf.id} className={styles.clientFileCheck}>
+                          <input
+                            type="checkbox"
+                            checked={selectedClientFileIds.includes(cf.id)}
+                            onChange={() => toggleClientFile(cf.id)}
+                          />
+                          <span className={styles.clientFileInfo}>
+                            <span className={styles.clientFileName}>
+                              {cf.file_label || cf.file_name}
+                            </span>
+                            {cf.file_label && cf.file_label !== cf.file_name && (
+                              <span className={styles.clientFileOriginal}>{cf.file_name}</span>
+                            )}
+                            {cf.file_size && (
+                              <span className={styles.clientFileSize}>{formatFileSize(cf.file_size)}</span>
+                            )}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {selectedClient && loadingClientFiles && (
+                  <div className={styles.fieldHint}>Loading client files...</div>
+                )}
+
+                <Input
+                  label="Report Title *"
+                  value={title}
+                  onChange={handleTitleChange}
+                  placeholder="e.g. Monthly Performance Report - March 2024"
+                  hint={autoFilled.title ? 'auto-filled' : undefined}
+                  required
+                />
+
+                <div className={styles.row}>
+                  <Input
+                    label="Period Start"
+                    type="date"
+                    value={periodStart}
+                    onChange={handlePeriodStartChange}
+                    hint={autoFilled.periodStart ? 'auto-filled' : undefined}
+                  />
+                  <Input
+                    label="Period End"
+                    type="date"
+                    value={periodEnd}
+                    onChange={handlePeriodEndChange}
+                    hint={autoFilled.periodEnd ? 'auto-filled' : undefined}
+                  />
+                </div>
+
+                <div className={styles.field}>
+                  <label className={styles.label}>
+                    Custom Instructions for AI (optional)
+                    <HelpTooltip text="Add specific goals, tone preferences, or metrics to highlight. E.g. 'Client is focused on ROAS, emphasise cost efficiency. Keep language simple — client is not technical.'" />
+                  </label>
+                  <textarea
+                    className={styles.textarea}
+                    value={customInstructions}
+                    onChange={(e) => setCustomInstructions(e.target.value)}
+                    placeholder="e.g. Emphasise ROAS performance, suggest budget increases for top campaigns, keep language simple for non-technical clients..."
+                    rows={3}
+                  />
+                </div>
+
+                <div className={styles.actions}>
+                  <Button type="submit">
+                    Upload & Process
+                  </Button>
+                  <Button type="button" variant="secondary" onClick={() => router.back()}>
+                    Cancel
+                  </Button>
+                </div>
+              </>
+            )}
           </>
         )}
       </form>

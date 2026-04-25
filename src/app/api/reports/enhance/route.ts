@@ -327,7 +327,7 @@ Here is your design template:
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PPC Report – Kennedy's Pharmacy | February 2026</title>
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Space+Grotesk:wght@700&family=DM+Sans:wght@400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
   :root {
     --primary: #2B6CB8;
@@ -352,6 +352,9 @@ Here is your design template:
     color: var(--charcoal);
     line-height: 1.6;
   }
+
+  h1, h2 { font-family: 'Dela Gothic One', sans-serif; }
+  h3, h4, .section-label, .subsection-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; }
 
   /* -- HEADER -- */
   .header {
@@ -379,7 +382,7 @@ Here is your design template:
     display: block;
   }
   .header-logo-text {
-    font-family: 'Anton', sans-serif;
+    font-family: 'Dela Gothic One', sans-serif;
     font-size: 32px;
     font-weight: 400;
     color: var(--charcoal);
@@ -909,7 +912,7 @@ TECHNICAL ACCURACY INSTRUCTIONS:
 
 HEADER INSTRUCTIONS:
 - The header uses a light background (#F7F9FC), NOT dark.
-- Left side: client logo area. ${clientLogoUrl ? `The client has a logo - render it as: <img src="${clientLogoUrl}" alt="${clientName}" style="max-height:60px;max-width:200px;object-fit:contain;">` : `No logo URL is available - render the client name "${clientName}" as styled text using the .header-logo-text class (Anton font, charcoal, uppercase).`}
+- Left side: client logo area. ${clientLogoUrl ? `The client has a logo - render it as: <img src="${clientLogoUrl}" alt="${clientName}" style="max-height:60px;max-width:200px;object-fit:contain;">` : `No logo URL is available - render the client name "${clientName}" as styled text using the .header-logo-text class (Dela Gothic One font, charcoal, uppercase).`}
 - Right side: report type label (e.g. "Google Ads Report"), report title, and period date range.
 - Below the header-inner: a 1px border line (.header-border) then a 4px gradient accent bar from #F26522 (orange) to #2D2D2D (charcoal).
 
