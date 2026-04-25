@@ -1,28 +1,32 @@
-import { createServerSupabase } from '@/lib/supabase/server';
-import { StatusBadge } from '@/components/StatusBadge/StatusBadge';
-import { format } from 'date-fns';
-import Link from 'next/link';
+import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
+import { DashboardReportsTable } from './DashboardReportsTable';
 import styles from './page.module.css';
 
 export default async function AdminDashboard() {
   const supabase = await createServerSupabase();
+  const adminSupabase = createServiceSupabase();
 
   const [
     { count: clientCount },
     { count: reportCount },
     { count: publishedCount },
     { count: processingCount },
-    { data: recentReports },
+    { data: reports },
+    { data: clients },
   ] = await Promise.all([
     supabase.from('clients').select('*', { count: 'exact', head: true }).eq('is_active', true),
     supabase.from('reports').select('*', { count: 'exact', head: true }),
     supabase.from('reports').select('*', { count: 'exact', head: true }).eq('is_published', true),
     supabase.from('reports').select('*', { count: 'exact', head: true }).eq('ai_status', 'processing'),
-    supabase
+    adminSupabase
       .from('reports')
-      .select('*, clients(name, slug)')
-      .order('created_at', { ascending: false })
-      .limit(10),
+      .select('*, clients(id, name)')
+      .order('created_at', { ascending: false }),
+    adminSupabase
+      .from('clients')
+      .select('id, name')
+      .eq('is_active', true)
+      .order('name'),
   ]);
 
   return (
@@ -49,41 +53,10 @@ export default async function AdminDashboard() {
       </div>
 
       <div className={styles.recentSection}>
-        <h2 className={styles.sectionTitle}>Recent Reports</h2>
-        {recentReports && recentReports.length > 0 ? (
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Report</th>
-                <th>Client</th>
-                <th>AI Status</th>
-                <th>Published</th>
-                <th>Created</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentReports.map((report: any) => (
-                <tr key={report.id}>
-                  <td>
-                    <Link href={`/admin/reports/${report.id}`} className={styles.reportLink}>
-                      {report.title}
-                    </Link>
-                  </td>
-                  <td>{report.clients?.name || '—'}</td>
-                  <td><StatusBadge status={report.ai_status} /></td>
-                  <td>
-                    <StatusBadge status={report.is_published ? 'published' : 'draft'} />
-                  </td>
-                  <td>{format(new Date(report.created_at), 'dd MMM yyyy')}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <div className={styles.empty}>
-            No reports yet. Upload your first PDF to get started.
-          </div>
-        )}
+        <DashboardReportsTable
+          initialReports={reports ?? []}
+          clients={clients ?? []}
+        />
       </div>
     </>
   );

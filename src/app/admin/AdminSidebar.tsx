@@ -14,7 +14,6 @@ interface AdminSidebarProps {
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: '📊' },
   { href: '/admin/clients', label: 'Clients', icon: '👥' },
-  { href: '/admin/reports', label: 'All Reports', icon: '📋', exact: false, excludePrefix: '/admin/reports/upload' },
   { href: '/admin/reports/upload', label: 'Upload Report', icon: '📄' },
   { href: '/admin/knowledge-base', label: 'Knowledge Base', icon: '📚' },
 ];
@@ -23,10 +22,9 @@ export function AdminSidebar({ profile }: AdminSidebarProps) {
   const pathname = usePathname();
   const supabase = createClient();
 
-  const isActive = (item: typeof navItems[number]) => {
-    if (item.href === '/admin') return pathname === '/admin';
-    if ('excludePrefix' in item && item.excludePrefix && pathname.startsWith(item.excludePrefix)) return false;
-    return pathname.startsWith(item.href);
+  const isActive = (href: string) => {
+    if (href === '/admin') return pathname === '/admin';
+    return pathname.startsWith(href);
   };
 
   async function handleLogout() {
@@ -50,7 +48,7 @@ export function AdminSidebar({ profile }: AdminSidebarProps) {
           <Link
             key={item.href}
             href={item.href}
-            className={`${styles.navLink} ${isActive(item) ? styles.navLinkActive : ''}`}
+            className={`${styles.navLink} ${isActive(item.href) ? styles.navLinkActive : ''}`}
           >
             <span className={styles.navIcon}>{item.icon}</span>
             {item.label}

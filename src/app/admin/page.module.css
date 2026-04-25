@@ -41,12 +41,65 @@
   margin-top: var(--space-8);
 }
 
+.reportsHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
+
 .sectionTitle {
   font-family: var(--font-body);
   font-size: var(--text-lg);
   font-weight: 600;
-  margin-bottom: var(--space-4);
   text-transform: none;
+  flex-shrink: 0;
+}
+
+.filterBar {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.filterSelect {
+  height: 34px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-family: var(--font-body);
+  color: var(--color-dark);
+  background: var(--color-white);
+  cursor: pointer;
+}
+
+.filterSelect:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.clearFilters {
+  font-size: var(--text-sm);
+  font-family: var(--font-body);
+  color: var(--color-dark-400);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 var(--space-2);
+  text-decoration: underline;
+}
+
+.clearFilters:hover {
+  color: var(--color-dark);
+}
+
+.resultCount {
+  font-size: var(--text-sm);
+  color: var(--color-dark-400);
+  white-space: nowrap;
 }
 
 .table {
@@ -83,6 +136,15 @@
 .reportLink {
   color: var(--color-primary);
   font-weight: 500;
+}
+
+.clientLink {
+  color: var(--color-dark);
+  font-weight: 500;
+}
+
+.clientLink:hover {
+  color: var(--color-primary);
 }
 
 .empty {
