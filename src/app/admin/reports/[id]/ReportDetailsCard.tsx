@@ -27,6 +27,14 @@ function fromMonthValue(val: string): string | null {
   return `${val}-01`;
 }
 
+// Format YYYY-MM as "Month YYYY" for display
+function formatMonthDisplay(val: string): string {
+  if (!val) return '—';
+  const [year, month] = val.split('-');
+  const d = new Date(parseInt(year), parseInt(month) - 1, 1);
+  return d.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
+}
+
 export function ReportDetailsCard({
   reportId,
   initialPeriodStart,
@@ -152,11 +160,11 @@ export function ReportDetailsCard({
           <div className={styles.detailsFieldGrid}>
             <div className={styles.detailsField}>
               <div className={styles.detailsLabel}>Period Start</div>
-              <div className={styles.detailsValue}>{periodStart || '—'}</div>
+              <div className={styles.detailsValue}>{formatMonthDisplay(periodStart)}</div>
             </div>
             <div className={styles.detailsField}>
               <div className={styles.detailsLabel}>Period End</div>
-              <div className={styles.detailsValue}>{periodEnd || '—'}</div>
+              <div className={styles.detailsValue}>{formatMonthDisplay(periodEnd)}</div>
             </div>
             <div className={styles.detailsField}>
               <div className={styles.detailsLabel}>Client</div>

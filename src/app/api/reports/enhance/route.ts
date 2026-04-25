@@ -255,11 +255,13 @@ WHAT TO OMIT:
       }
     }
 
-    const promptText = `BEFORE GENERATING THE REPORT, output these two lines first, then a blank line, then the HTML:
+    const promptText = `BEFORE GENERATING THE REPORT, output these four lines first, then a blank line, then the HTML:
 CLIENT_NAME: [exact client/business name as it appears in the PDF]
 REPORT_TYPE: [one of: Google Ads, SEO, Meta Ads, Microsoft Ads, LinkedIn Ads, Google Business Profile]
+PERIOD_START: [first day of the reporting period in YYYY-MM-DD format, e.g. 2026-03-01]
+PERIOD_END: [last day of the reporting period in YYYY-MM-DD format, e.g. 2026-03-31]
 
-Then output the complete HTML report starting with <!DOCTYPE html>. The two lines above will be stripped — they are for internal processing only. You MUST include both lines.
+Then output the complete HTML report starting with <!DOCTYPE html>. The four lines above will be stripped — they are for internal processing only. You MUST include all four lines.
 
 You are a digital marketing report specialist for Shtudio, a Sydney digital agency.
 
@@ -953,11 +955,26 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
       })
       .join('');
 
-    // ── Mismatch detection (non-fatal — wrapped in try/catch) ──
+    // ── Mismatch detection + date extraction (non-fatal — wrapped in try/catch) ──
     console.log('RAW_RESPONSE_START:', rawResponse.substring(0, 500));
 
     let mismatchDescription: string | null = null;
     let clientMismatch = false;
+    let extractedPeriodStart: string | null = null;
+    let extractedPeriodEnd: string | null = null;
+
+    // Parse a Claude-returned date string to YYYY-MM-DD, returning null if unparseable
+    function normalizeExtractedDate(raw: string): string | null {
+      const s = raw.trim();
+      // Exact YYYY-MM-DD
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+      // YYYY-MM → first of month
+      if (/^\d{4}-\d{2}$/.test(s)) return `${s}-01`;
+      // Try native Date parse as last resort
+      const d = new Date(s);
+      if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+      return null;
+    }
 
     try {
       let detectedClientName: string | null = null;
@@ -975,6 +992,20 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
       if (reportTypeMatch) {
         detectedReportType = reportTypeMatch[1].trim();
         rawResponse = rawResponse.replace(/REPORT_TYPE:\s*.+[\r\n]*/i, '');
+      }
+
+      const periodStartMatch = rawResponse.match(/PERIOD_START:\s*(.+)/i);
+      if (periodStartMatch) {
+        extractedPeriodStart = normalizeExtractedDate(periodStartMatch[1]);
+        rawResponse = rawResponse.replace(/PERIOD_START:\s*.+[\r\n]*/i, '');
+        console.log('PERIOD_START extracted:', extractedPeriodStart);
+      }
+
+      const periodEndMatch = rawResponse.match(/PERIOD_END:\s*(.+)/i);
+      if (periodEndMatch) {
+        extractedPeriodEnd = normalizeExtractedDate(periodEndMatch[1]);
+        rawResponse = rawResponse.replace(/PERIOD_END:\s*.+[\r\n]*/i, '');
+        console.log('PERIOD_END extracted:', extractedPeriodEnd);
       }
 
       // Fuzzy name comparison
@@ -1042,7 +1073,7 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
 
     const enhancedHtml = rawResponse.trim();
 
-    // Save enhanced HTML, mismatch info, and mark as completed
+    // Save enhanced HTML, mismatch info, extracted dates, and mark as completed
     await supabase
       .from('reports')
       .update({
@@ -1051,6 +1082,8 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
         ai_error: null,
         detected_client_name: mismatchDescription,
         client_mismatch: clientMismatch,
+        ...(extractedPeriodStart ? { period_start: extractedPeriodStart } : {}),
+        ...(extractedPeriodEnd ? { period_end: extractedPeriodEnd } : {}),
       })
       .eq('id', reportId);
 
