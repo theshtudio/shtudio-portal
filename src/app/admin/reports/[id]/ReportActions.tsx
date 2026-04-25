@@ -13,9 +13,10 @@ interface ReportActionsProps {
   showRefresh?: boolean;
   showRetry?: boolean;
   showDelete?: boolean;
+  showPublishToggle?: boolean;
 }
 
-export function ReportActions({ report, clientId, showRefresh, showRetry, showDelete }: ReportActionsProps) {
+export function ReportActions({ report, clientId, showRefresh, showRetry, showDelete, showPublishToggle }: ReportActionsProps) {
   const router = useRouter();
   const supabase = createClient();
   const [toggling, setToggling] = useState(false);
@@ -64,7 +65,7 @@ export function ReportActions({ report, clientId, showRefresh, showRetry, showDe
 
   return (
     <>
-      {report.ai_status === 'completed' && (
+      {showPublishToggle && report.ai_status === 'completed' && (
         <div className={styles.toggle} onClick={togglePublish}>
           <div className={`${styles.toggleSwitch} ${report.is_published ? styles.active : ''}`}>
             <div className={styles.toggleKnob} />

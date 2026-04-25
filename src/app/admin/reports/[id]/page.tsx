@@ -88,7 +88,7 @@ export default async function ReportDetailPage({
                     : 'Publish this report to make it accessible via the share link.'}
                 </div>
               </div>
-              <ReportActions report={report} />
+              <ReportActions report={report} showPublishToggle />
             </div>
             {report.is_published && (
               <div className={styles.shareRow}>
