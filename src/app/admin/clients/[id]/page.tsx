@@ -1,9 +1,7 @@
-import { createServerSupabase } from '@/lib/supabase/server';
-import { StatusBadge } from '@/components/StatusBadge/StatusBadge';
-import { Button } from '@/components/Button/Button';
+import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
 import { ClientDetails } from './ClientDetails';
 import { ClientFiles } from './ClientFiles';
-import { format } from 'date-fns';
+import { ClientReports } from './ClientReports';
 import Link from 'next/link';
 import styles from './page.module.css';
 
@@ -15,6 +13,8 @@ export default async function ClientDetailPage({
   const { id } = await params;
   const supabase = await createServerSupabase();
 
+  const { data: { user } } = await supabase.auth.getUser();
+
   const { data: client } = await supabase
     .from('clients')
     .select('*')
@@ -25,11 +25,20 @@ export default async function ClientDetailPage({
     return <div className={styles.notFound}>Client not found.</div>;
   }
 
-  const { data: reports } = await supabase
-    .from('reports')
-    .select('*')
-    .eq('client_id', client.id)
-    .order('created_at', { ascending: false });
+  const adminSupabase = createServiceSupabase();
+
+  const [{ data: reports }, { data: profile }] = await Promise.all([
+    adminSupabase
+      .from('reports')
+      .select('*')
+      .eq('client_id', client.id)
+      .order('created_at', { ascending: false }),
+    user
+      ? adminSupabase.from('profiles').select('role, can_delete_files').eq('id', user.id).single()
+      : Promise.resolve({ data: null }),
+  ]);
+
+  const canDelete = profile?.role === 'admin' && profile?.can_delete_files === true;
 
   return (
     <>
@@ -41,53 +50,11 @@ export default async function ClientDetailPage({
 
       <ClientFiles clientId={client.id} />
 
-      <div className={styles.reportsSection}>
-        <div className={styles.sectionHeader}>
-          <h2 className={styles.sectionTitle}>Reports</h2>
-          <Link href={`/admin/reports/upload?client=${client.id}`}>
-            <Button size="sm">Upload Report</Button>
-          </Link>
-        </div>
-
-        {reports && reports.length > 0 ? (
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Title</th>
-                <th>Period</th>
-                <th>AI Status</th>
-                <th>Published</th>
-                <th>Created</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reports.map((report) => (
-                <tr key={report.id}>
-                  <td>
-                    <Link href={`/admin/reports/${report.id}`} className={styles.reportLink}>
-                      {report.title}
-                    </Link>
-                  </td>
-                  <td>
-                    {report.period_start && report.period_end
-                      ? `${format(new Date(report.period_start), 'MMM yyyy')} - ${format(new Date(report.period_end), 'MMM yyyy')}`
-                      : '—'}
-                  </td>
-                  <td><StatusBadge status={report.ai_status as any} /></td>
-                  <td>
-                    <StatusBadge status={report.is_published ? 'published' : 'draft'} />
-                  </td>
-                  <td>{format(new Date(report.created_at), 'dd MMM yyyy')}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <div className={styles.empty}>
-            No reports for this client yet.
-          </div>
-        )}
-      </div>
+      <ClientReports
+        clientId={client.id}
+        initialReports={reports ?? []}
+        canDelete={canDelete}
+      />
     </>
   );
 }

@@ -78,7 +78,6 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  // Verify the user is authenticated and is an admin
   const supabase = await createServerSupabase();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -86,25 +85,24 @@ export async function DELETE(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { data: profile } = await supabase
+  const adminSupabase = createServiceSupabase();
+
+  const { data: profile } = await adminSupabase
     .from('profiles')
-    .select('role')
+    .select('role, can_delete_files')
     .eq('id', user.id)
     .single();
 
-  if (!profile || profile.role !== 'admin') {
+  if (!profile || profile.role !== 'admin' || !profile.can_delete_files) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const { id } = await params;
 
-  // Use service role client to bypass RLS
-  const adminSupabase = createServiceSupabase();
-
-  // Get the report first so we can delete the PDF from storage
+  // Get the report first so we can delete storage and write a rich audit log
   const { data: report, error: fetchError } = await adminSupabase
     .from('reports')
-    .select('id, pdf_storage_path, client_id')
+    .select('id, title, pdf_storage_path, pdf_storage_paths, client_id')
     .eq('id', id)
     .single();
 
@@ -112,14 +110,17 @@ export async function DELETE(
     return NextResponse.json({ error: 'Report not found' }, { status: 404 });
   }
 
-  // Delete the PDF from Supabase Storage if it exists
-  if (report.pdf_storage_path) {
-    await adminSupabase.storage
-      .from('report-pdfs')
-      .remove([report.pdf_storage_path]);
+  // Delete all PDFs from storage
+  const pathsToDelete = [
+    ...(report.pdf_storage_path ? [report.pdf_storage_path] : []),
+    ...(report.pdf_storage_paths ?? []),
+  ].filter((p, i, arr) => arr.indexOf(p) === i); // deduplicate
+
+  if (pathsToDelete.length > 0) {
+    await adminSupabase.storage.from('report-pdfs').remove(pathsToDelete);
   }
 
-  // Delete the report record from the database
+  // Delete the report record
   const { error: deleteError } = await adminSupabase
     .from('reports')
     .delete()
@@ -129,15 +130,15 @@ export async function DELETE(
     return NextResponse.json({ error: deleteError.message }, { status: 500 });
   }
 
-  // Log the action
+  // Audit log
   await adminSupabase.from('audit_log').insert({
     user_id: user.id,
-    action: 'report.deleted',
+    action: 'delete_report',
     resource_type: 'report',
     resource_id: id,
     metadata: {
+      title: report.title,
       client_id: report.client_id,
-      pdf_storage_path: report.pdf_storage_path,
     },
   });
 
