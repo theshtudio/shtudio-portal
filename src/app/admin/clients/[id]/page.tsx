@@ -47,13 +47,13 @@ export default async function ClientDetailPage({
 
       <ClientDetails client={client} />
 
-      <ClientFiles clientId={client.id} />
-
       <ClientReports
         clientId={client.id}
         initialReports={reports ?? []}
         canDelete={canDelete}
       />
+
+      <ClientFiles clientId={client.id} />
     </>
   );
 }
