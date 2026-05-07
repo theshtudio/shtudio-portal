@@ -264,6 +264,15 @@ Use the .m-change.up / .m-change.down pill styles for positive/negative changes.
 
 SEO BACKLINKS INSTRUCTION: For the backlinks and directories section, mention only the total number of new backlinks and directories built this month — do not list individual URLs. For example: 'This month we built 10 new backlinks across directories, forums and profile sites.' Never output the actual URLs in the client-facing report.
 
+SEO BADGE / PILL COLOUR CONVENTION — CRITICAL:
+Red and green pills (.m-change.down / .m-change.up) carry semantic meaning in analytics: red = negative outcome, green = positive outcome. They MUST only be used for genuine period-over-period deltas where you have actual comparison data (e.g. "↓ 12% vs last month", "↑ 8% YoY").
+
+Never apply red or green styling to descriptive labels such as "All channels", "99% of traffic", "Overall average", "Across the period", "Top 10 pages", or any other neutral descriptor. These have no positive/negative signal and must use the neutral grey pill style:
+
+   <span class="m-change neutral">All channels</span>
+
+Default rule: if there is no comparison number behind the badge, use .m-change.neutral. Coloured pills require an arrow (↑/↓) and a percentage. If you don't have both, the pill is neutral.
+
 SEO SECTION COMPLETENESS — CRITICAL:
 Do NOT drop sections because they seem complex or detailed. Every section that exists in the source PDF must have a corresponding section in the HTML output, except raw link-dump lists (individual URLs for external articles, directories, ClickUp/Google Sheets internal links). The goal of simplification is cleaner layout and language — not fewer sections or less data.
 
@@ -272,37 +281,89 @@ Render ALL of the following sections if the underlying data exists in the PDF:
 1. TRAFFIC BY CHANNEL TABLE
    Extract the full GA4 channel breakdown table. Render an HTML <table> with columns: Channel, Total Users, New Users, Returning Users, Avg Engagement Time, Engaged Sessions, Event Count. Include all rows (Direct, Organic Search, Referral, Organic Social, Unassigned, etc.). Do not summarise or collapse rows.
 
-2. MONTH-ON-MONTH COMPARISON (if data present)
+2. ORGANIC TRAFFIC PERFORMANCE (monthly time series — REQUIRED if monthly data present)
+   The source PDF typically contains a "Organic Traffic Dynamics" or similar table with monthly breakdowns spanning 12-13 months (e.g. March 2025 → March 2026), with columns Total Users, New Users, Sessions per month. You MUST extract every month's row and render BOTH:
+
+   (a) A Chart.js line chart titled "Organic Traffic Performance" with TWO lines — Sessions and New Users — across the full month range. Use canvas id="chart-organic-traffic". The chart container must be wrapped in <div class="chart-container">. Use line colours #2B6CB8 (Sessions) and #4A90D9 (New Users).
+
+   (b) A complete HTML table directly below the chart with columns: Month, Total Users, New Users, Sessions. Include every month present in the source data — do not truncate.
+
+   Concrete code template you MUST follow for this chart (replace LABELS_JSON, SESSIONS_JSON, NEW_USERS_JSON with real arrays extracted from the PDF; arrays must be the same length and be in chronological order):
+
+   <div class="chart-section">
+     <h3>Organic Traffic Performance</h3>
+     <p class="chart-sub">Monthly organic users and sessions across the available period.</p>
+     <div class="chart-container"><canvas id="chart-organic-traffic"></canvas></div>
+   </div>
+
+   …then inside the single bottom-of-body DOMContentLoaded script:
+
+   new Chart(document.getElementById('chart-organic-traffic').getContext('2d'), {
+     type: 'line',
+     data: {
+       labels: LABELS_JSON,
+       datasets: [
+         { label: 'Sessions', data: SESSIONS_JSON, borderColor: '#2B6CB8', backgroundColor: 'rgba(43,108,184,0.08)', tension: 0.4, fill: true, borderWidth: 2, pointRadius: 3 },
+         { label: 'New Users', data: NEW_USERS_JSON, borderColor: '#4A90D9', backgroundColor: 'rgba(74,144,217,0.06)', tension: 0.4, fill: false, borderWidth: 2, pointRadius: 3 }
+       ]
+     },
+     options: {
+       responsive: true,
+       maintainAspectRatio: true,
+       plugins: { legend: { position: 'top', labels: { font: { family: 'DM Sans' }, usePointStyle: true } }, tooltip: { backgroundColor: '#1A1A2E', titleColor: '#fff', bodyColor: '#fff' } },
+       scales: { x: { grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { font: { family: 'DM Sans' } } }, y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { font: { family: 'DM Sans' } } } }
+     }
+   });
+
+   You MUST inline the actual numeric arrays from the PDF — do not output placeholder strings, do not embed images of charts, and do not omit the chart even if the table is also present. If the PDF only contains a chart image (no underlying table), read the values off the chart axes as accurately as you can.
+
+3. MONTH-ON-MONTH COMPARISON (if data present)
    Render a table showing current period vs previous period with a % change column, for each channel. Follow it with a 2–3 sentence AI-written narrative interpreting the key changes (what improved, what declined, what to watch).
 
-3. YEAR-ON-YEAR COMPARISON (if data present)
+4. YEAR-ON-YEAR COMPARISON (if data present)
    Same structure as the MoM table but comparing to the same period last year. With narrative.
 
-4. SEARCH CONSOLE SECTION (if data present)
+5. SEARCH CONSOLE SECTION (if data present)
    Show the 4 headline metrics as cards: Total Clicks, Total Impressions, Average CTR, Average Position — current period vs previous period with % change indicators. Add a short narrative paragraph. If click/impression trend data is available over the period, render a dual-axis Chart.js line chart (clicks on left axis, impressions on right axis) titled "Search Console: Clicks & Impressions". Use canvas id="chart-search-console".
 
-5. EXTERNAL OPTIMISATION — SEMRUSH METRICS
-   Render all available SEMrush metrics as cards in a responsive grid. Include: Authority Score (with label), Organic Traffic, Paid Traffic, Referring Domains, Traffic Share, Organic Keywords, Paid Keywords, Backlinks. Show % change / MoM change indicators where shown in the source. Do not drop metrics just because they are zero or unchanged.
+6. AI SEARCH TRAFFIC (if data present)
+   The source PDF may include a breakdown of users arriving from AI assistants (chatgpt.com, perplexity.ai, claude.ai, copilot.microsoft.com, gemini.google.com, etc.). Render an HTML table titled "AI Search Traffic" with columns: Source, Users, Sessions (or whatever metrics the PDF provides). Include every AI source listed.
 
-6. KEYWORD POSITION DISTRIBUTION CHART (if data present)
-   Render a Chart.js stacked bar or area chart showing keyword distribution across position brackets (Top 3, 4–10, 11–20, 21–50, 51–100) over the available time period (typically 6 months). Extract data values from the PDF as accurately as possible. Use canvas id="chart-keyword-positions". Title: "Keyword Position Distribution".
+7. MOST VISITED ORGANIC PAGES (if data present)
+   The PDF often shows a long list (hundreds or thousands) of organic landing pages. Render an HTML <table> titled "Most Visited Organic Pages" with the TOP 15 rows by Users (or by whatever the source orders them). Columns should mirror the PDF — typically Page Path, Users, Sessions, Avg Engagement Time. Below the table add a small note: "Top 15 of [N] pages" using the total count from the source where visible. Do NOT include all 2000+ rows — the truncation is intentional for client-readability.
 
-7. REFERRING DOMAINS & BACKLINKS GROWTH CHARTS (if trend data present)
-   Render two Chart.js line charts side by side: one for Referring Domains growth over time, one for Total Backlinks growth over time. Extract values from the SEMrush trend charts in the PDF. Use canvas ids "chart-referring-domains" and "chart-backlinks-growth".
+8. ORGANIC TOP QUERIES (if data present)
+   From the Google Search Console "Organic Report Query" section, render a table of the TOP 15 queries by clicks, with columns: Query, Clicks, Impressions, CTR, Position. This is separate from the Search Console headline cards in section 5.
 
-8. WORK COMPLETED
-   Reproduce the full list verbatim from the PDF. Do not summarise, shorten, or omit any items. Render as a styled list or table.
+9. ORGANIC LANDING PAGES — SEARCH CONSOLE (if data present)
+   From the Google Search Console "Organic Report Landing Pages" section, render a table of the TOP 15 landing pages by clicks, with columns: Page, Clicks, Impressions, CTR, Position.
 
-9. RECOMMENDATIONS
-   Reproduce in full, exactly as written in the PDF. Do not shorten.
+10. EXTERNAL OPTIMISATION — SEMRUSH METRICS
+    Render all available SEMrush metrics as cards in a responsive grid. Include: Authority Score (with label), Organic Traffic, Paid Traffic, Referring Domains, Traffic Share, Organic Keywords, Paid Keywords, Backlinks. Show % change / MoM change indicators where shown in the source. Do not drop metrics just because they are zero or unchanged. Descriptive labels on these cards (e.g. "Domain authority", "All channels") must use .m-change.neutral, not red.
 
-10. PLAN FOR NEXT MONTH
+11. KEYWORD POSITION DISTRIBUTION CHART (if data present)
+    Render a Chart.js stacked bar or area chart showing keyword distribution across position brackets (Top 3, 4–10, 11–20, 21–50, 51–100) over the available time period (typically 6 months). Extract data values from the PDF as accurately as possible. Use canvas id="chart-keyword-positions". Title: "Keyword Position Distribution".
+
+12. REFERRING DOMAINS & BACKLINKS GROWTH CHARTS (if trend data present)
+    Render two Chart.js line charts side by side: one for Referring Domains growth over time, one for Total Backlinks growth over time. Extract values from the SEMrush trend charts in the PDF. Use canvas ids "chart-referring-domains" and "chart-backlinks-growth".
+
+13. WORK COMPLETED
+    Reproduce the full list verbatim from the PDF. Do not summarise, shorten, or omit any items. Render as a styled list or table.
+
+14. RECOMMENDATIONS
     Reproduce in full, exactly as written in the PDF. Do not shorten.
+
+15. PLAN FOR NEXT MONTH
+    Reproduce in full, exactly as written in the PDF. Do not shorten.
+
+CHART COLOURS FOR SEO LINE CHARTS:
+For line / area charts in the SEO report, use only these three colours in this order: #2B6CB8 (primary), #4A90D9 (secondary), #1A4A8A (accent). Do not use the wider 6-colour palette listed elsewhere — that's for Google Ads breakdown charts.
 
 WHAT TO OMIT:
 - Individual URL dumps for external articles placed / backlinks built (mention counts only)
 - Internal document links (ClickUp tasks, Google Sheets links)
-- Raw "Other links" URL lists`;
+- Raw "Other links" URL lists
+- Pagination of 2000+ row tables — show top 15 with a count footer instead`;
       }
     }
 
@@ -609,6 +670,7 @@ Here is your design template:
   .m-change.up { background: #DCFCE7; color: var(--green); }
   .m-change.down { background: #FEE2E2; color: var(--red); }
   .m-change.good-down { background: #DCFCE7; color: var(--green); }
+  .m-change.neutral { background: #F1F5F9; color: var(--mid); }
 
   /* -- CHART FALLBACKS -- */
   .chart-container:empty { display: none; }
