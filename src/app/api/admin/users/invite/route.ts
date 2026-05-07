@@ -43,8 +43,12 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const origin = request.headers.get('origin') ?? new URL(request.url).origin;
-  const redirectTo = `${origin}/auth/callback?next=/auth/set-password`;
+  // Send invited users straight to /auth/set-password. The Supabase invite link
+  // uses the implicit (hash-token) flow, so /auth/callback (which expects a ?code
+  // query param) cannot consume it and ends up rendering blank or erroring.
+  const baseUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ?? 'https://portal.shtudio.com.au';
+  const redirectTo = `${baseUrl.replace(/\/$/, '')}/auth/set-password`;
 
   const { data, error } = await adminSupabase.auth.admin.inviteUserByEmail(email, {
     data: {
@@ -58,6 +62,27 @@ export async function POST(request: NextRequest) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Defensive backfill: the handle_new_user() trigger should have created the
+  // profile row with role='admin' and can_delete_files=false from the metadata
+  // above, but if the trigger didn't run or used the default role we upsert
+  // the canonical values here so the team list shows the new admin straight away.
+  if (data.user) {
+    await adminSupabase
+      .from('profiles')
+      .upsert(
+        {
+          id: data.user.id,
+          email,
+          full_name: fullName,
+          role: 'admin',
+          can_delete_files: false,
+          invited_by: user.id,
+          invited_at: new Date().toISOString(),
+        },
+        { onConflict: 'id' },
+      );
   }
 
   return NextResponse.json({ user: data.user });

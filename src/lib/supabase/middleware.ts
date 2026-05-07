@@ -28,8 +28,11 @@ export async function updateSession(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   const pathname = request.nextUrl.pathname;
 
-  // Public routes that don't need auth
-  const publicRoutes = ['/login', '/auth/callback', '/share'];
+  // Public routes that don't need auth.
+  // /auth/set-password is reached from email invite links where the session is
+  // delivered in the URL hash and only materialises in the browser, so the
+  // server-side middleware can't see a cookie on first load.
+  const publicRoutes = ['/login', '/auth/callback', '/auth/set-password', '/share'];
   const isPublic = publicRoutes.some(r => pathname.startsWith(r));
 
   // Not logged in? Redirect to login (unless already on public route)
