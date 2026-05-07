@@ -11,6 +11,7 @@ interface UsersPageClientProps {
   currentUserEmail: string;
   isSuperAdmin: boolean;
   initialAdmins: Profile[];
+  pendingUserIds: string[];
 }
 
 function formatDate(value: string | null): string {
@@ -26,10 +27,12 @@ export function UsersPageClient({
   currentUserEmail,
   isSuperAdmin,
   initialAdmins,
+  pendingUserIds,
 }: UsersPageClientProps) {
   const router = useRouter();
   const [admins, setAdmins] = useState<Profile[]>(initialAdmins);
   const [showInvite, setShowInvite] = useState(false);
+  const pendingSet = new Set(pendingUserIds);
 
   useEffect(() => {
     setAdmins(initialAdmins);
@@ -40,7 +43,33 @@ export function UsersPageClient({
   const [inviteSuccess, setInviteSuccess] = useState('');
   const [inviting, setInviting] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [resendingId, setResendingId] = useState<string | null>(null);
+  const [resentId, setResentId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
+
+  async function handleResend(profile: Profile) {
+    setRowError(null);
+    setResentId(null);
+    setResendingId(profile.id);
+    try {
+      const res = await fetch(`/api/admin/users/${profile.id}/resend-invite`, {
+        method: 'POST',
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setRowError({ id: profile.id, message: json.error ?? 'Failed to resend invite.' });
+        return;
+      }
+      setResentId(profile.id);
+    } catch (err) {
+      setRowError({
+        id: profile.id,
+        message: err instanceof Error ? err.message : 'Failed to resend invite.',
+      });
+    } finally {
+      setResendingId(null);
+    }
+  }
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
@@ -153,13 +182,14 @@ export function UsersPageClient({
               <th>Role</th>
               <th>Joined</th>
               <th>Permissions</th>
+              <th>Status</th>
               {isSuperAdmin && <th>Can delete files</th>}
             </tr>
           </thead>
           <tbody>
             {admins.length === 0 && (
               <tr>
-                <td colSpan={isSuperAdmin ? 6 : 5} className={styles.empty}>
+                <td colSpan={isSuperAdmin ? 7 : 6} className={styles.empty}>
                   No admin users yet.
                 </td>
               </tr>
@@ -167,6 +197,7 @@ export function UsersPageClient({
             {admins.map((p) => {
               const isMe = p.email === currentUserEmail;
               const isSuper = p.email?.toLowerCase() === 'alex@shtud.io';
+              const isPending = pendingSet.has(p.id);
               return (
                 <tr key={p.id}>
                   <td>
@@ -184,6 +215,32 @@ export function UsersPageClient({
                     {p.can_delete_files
                       ? 'Full access (can delete files)'
                       : 'Limited (cannot delete files)'}
+                  </td>
+                  <td>
+                    {isPending ? (
+                      <div className={styles.statusCell}>
+                        <span className={styles.pendingBadge}>Pending</span>
+                        {isSuperAdmin && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            loading={resendingId === p.id}
+                            onClick={() => handleResend(p)}
+                          >
+                            Resend Invite
+                          </Button>
+                        )}
+                        {resentId === p.id && (
+                          <span className={styles.resentNote}>Sent ✓</span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className={styles.activeBadge}>Active</span>
+                    )}
+                    {rowError?.id === p.id && !isSuperAdmin && (
+                      <div className={styles.rowError}>{rowError.message}</div>
+                    )}
                   </td>
                   {isSuperAdmin && (
                     <td>

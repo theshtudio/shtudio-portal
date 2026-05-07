@@ -132,3 +132,38 @@
   color: #b00;
   margin-top: var(--space-1);
 }
+
+.statusCell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.pendingBadge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: #fff3cd;
+  color: #8a6d3b;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.activeBadge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: #e6f4ea;
+  color: #1e7e34;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.resentNote {
+  font-size: var(--text-xs);
+  color: #060;
+  font-weight: 500;
+}
