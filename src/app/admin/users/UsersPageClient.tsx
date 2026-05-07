@@ -45,6 +45,9 @@ export function UsersPageClient({
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [resentId, setResentId] = useState<string | null>(null);
+  const [resettingId, setResettingId] = useState<string | null>(null);
+  const [resetSentId, setResetSentId] = useState<string | null>(null);
+  const [resetError, setResetError] = useState<{ id: string; message: string } | null>(null);
   const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
 
   async function handleResend(profile: Profile) {
@@ -68,6 +71,33 @@ export function UsersPageClient({
       });
     } finally {
       setResendingId(null);
+    }
+  }
+
+  async function handleSendPasswordReset(profile: Profile) {
+    setResetError(null);
+    setResetSentId(null);
+    setResettingId(profile.id);
+    try {
+      const res = await fetch(`/api/admin/users/${profile.id}/send-password-reset`, {
+        method: 'POST',
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setResetError({
+          id: profile.id,
+          message: json.error ?? 'Failed to send password reset.',
+        });
+        return;
+      }
+      setResetSentId(profile.id);
+    } catch (err) {
+      setResetError({
+        id: profile.id,
+        message: err instanceof Error ? err.message : 'Failed to send password reset.',
+      });
+    } finally {
+      setResettingId(null);
     }
   }
 
@@ -236,10 +266,29 @@ export function UsersPageClient({
                         )}
                       </div>
                     ) : (
-                      <span className={styles.activeBadge}>Active</span>
+                      <div className={styles.statusCell}>
+                        <span className={styles.activeBadge}>Active</span>
+                        {isSuperAdmin && p.invited_by && !isSuper && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            loading={resettingId === p.id}
+                            onClick={() => handleSendPasswordReset(p)}
+                          >
+                            Send Password Reset
+                          </Button>
+                        )}
+                        {resetSentId === p.id && (
+                          <span className={styles.resentNote}>Sent ✓</span>
+                        )}
+                      </div>
                     )}
                     {rowError?.id === p.id && !isSuperAdmin && (
                       <div className={styles.rowError}>{rowError.message}</div>
+                    )}
+                    {resetError?.id === p.id && (
+                      <div className={styles.rowError}>{resetError.message}</div>
                     )}
                   </td>
                   {isSuperAdmin && (
