@@ -11,23 +11,85 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
 });
 
-// Map file extensions/types to Anthropic media types.
-// Returns null for extensions we don't support — callers MUST skip those
-// rather than send them to Anthropic with a guessed media_type.
-function getMediaType(path: string): string | null {
-  const ext = path.split('.').pop()?.toLowerCase();
-  if (ext === 'pdf') return 'application/pdf';
-  if (ext === 'docx') return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-  if (ext === 'doc') return 'application/msword';
-  if (ext === 'xlsx') return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-  if (ext === 'xls') return 'application/vnd.ms-excel';
-  if (ext === 'csv') return 'text/csv';
-  return null;
+// Classify a file by its path extension into the kind of Anthropic content
+// block we should produce. Returns 'unsupported' for anything we don't have
+// a routing for — callers MUST skip those rather than guess.
+type FileKind =
+  | { kind: 'pdf'; mediaType: 'application/pdf' }
+  | { kind: 'image'; mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp' }
+  | { kind: 'docx-text' }
+  | { kind: 'unsupported'; reason: string };
+
+function classifyByExtension(path: string): FileKind {
+  const ext = path.split('.').pop()?.toLowerCase() ?? '';
+  switch (ext) {
+    case 'pdf': return { kind: 'pdf', mediaType: 'application/pdf' };
+    case 'docx': return { kind: 'docx-text' };
+    case 'png': return { kind: 'image', mediaType: 'image/png' };
+    case 'jpg':
+    case 'jpeg': return { kind: 'image', mediaType: 'image/jpeg' };
+    case 'gif': return { kind: 'image', mediaType: 'image/gif' };
+    case 'webp': return { kind: 'image', mediaType: 'image/webp' };
+    // Office formats other than .pdf/.docx and plain-text formats are not
+    // accepted by the Anthropic document block (which is PDF-only) and we
+    // don't have a text extractor wired up for them yet. Skip with a warn.
+    case 'doc':
+    case 'xls':
+    case 'xlsx':
+    case 'csv':
+    case 'txt':
+    case 'json':
+      return { kind: 'unsupported', reason: `extractor not implemented for .${ext}` };
+    default:
+      return { kind: 'unsupported', reason: `no handler for ext='${ext}'` };
+  }
 }
 
-// Download a file from storage and return as a content block for Claude
-// .docx files are extracted to plain text via mammoth; PDFs are sent as base64 document blocks
-async function downloadAsDocBlock(
+// Verify that the buffer's leading bytes match the format we think it is.
+// Returns true if the magic matches, false otherwise. Used to refuse
+// shipping mislabelled bytes to Anthropic (which produces opaque 4xx).
+function magicMatches(
+  buffer: Buffer,
+  kind: 'pdf' | 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp',
+): boolean {
+  switch (kind) {
+    case 'pdf':
+      return buffer.length >= 5 && buffer.subarray(0, 5).toString('latin1') === '%PDF-';
+    case 'image/png':
+      return (
+        buffer.length >= 8 &&
+        buffer
+          .subarray(0, 8)
+          .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+      );
+    case 'image/jpeg':
+      return (
+        buffer.length >= 3 &&
+        buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))
+      );
+    case 'image/gif': {
+      if (buffer.length < 6) return false;
+      const head = buffer.subarray(0, 6).toString('latin1');
+      return head === 'GIF87a' || head === 'GIF89a';
+    }
+    case 'image/webp':
+      return (
+        buffer.length >= 12 &&
+        buffer.subarray(0, 4).toString('latin1') === 'RIFF' &&
+        buffer.subarray(8, 12).toString('latin1') === 'WEBP'
+      );
+  }
+}
+
+// Download a file from storage and return it as the right Anthropic content
+// block kind for that file:
+//   .pdf  → document block (only application/pdf is accepted in document blocks)
+//   .docx → text block (extracted via mammoth)
+//   .png/.jpg/.jpeg/.gif/.webp → image block
+//   anything else → skip with a console.warn
+// Returns null when the file is unsupported, fails to download, or its
+// magic bytes don't match the claimed media_type — all skip cases.
+async function downloadAsContentBlock(
   supabase: ReturnType<typeof createServiceSupabase>,
   bucket: string,
   path: string,
@@ -39,73 +101,80 @@ async function downloadAsDocBlock(
   }
 
   const buffer = Buffer.from(await data.arrayBuffer());
-  const ext = path.split('.').pop()?.toLowerCase();
+  const classified = classifyByExtension(path);
 
-  // For .docx files, extract raw text and send as a text block
-  if (ext === 'docx') {
+  // .docx → text via mammoth. media_type isn't used here because we send
+  // the extracted plain text in a text block.
+  if (classified.kind === 'docx-text') {
     try {
       const result = await mammoth.extractRawText({ buffer });
       const text = result.value;
       if (!text || text.trim().length === 0) {
-        console.warn(`Empty text extracted from .docx: ${bucket}/${path}`);
+        console.warn(`[enhance:doc-block] empty text from .docx: ${bucket}/${path}`);
         return null;
       }
-      console.log(`Extracted ${text.length} chars from .docx: ${path}`);
+      console.log('[enhance:doc-block] prepared', {
+        bucket,
+        path,
+        resolvedType: 'text',
+        byteLength: buffer.length,
+        textLength: text.length,
+      });
       return {
         type: 'text',
         text: `[Content extracted from ${path.split('/').pop()}]\n\n${text}`,
       };
     } catch (docxErr) {
-      console.error(`Failed to extract text from .docx ${path}:`, docxErr);
+      console.error(`[enhance:doc-block] failed to extract .docx ${path}:`, docxErr);
       return null;
     }
   }
 
-  // For PDFs and other supported binary types, send as base64 document block.
-  // media_type is hardcoded per extension — never read from Storage metadata,
-  // which can come back as application/octet-stream.
-  const mediaType = getMediaType(path);
-  if (!mediaType) {
+  if (classified.kind === 'unsupported') {
     console.warn(
-      `[enhance:doc-block] skipping unsupported file ${bucket}/${path} (no media_type mapping for ext='${ext ?? ''}')`,
+      `[enhance:doc-block] skipping ${bucket}/${path}: ${classified.reason}`,
     );
     return null;
   }
 
-  // Magic-byte sanity check for PDFs: refuse to send a non-PDF buffer with
-  // media_type='application/pdf' to Anthropic — that's exactly what trips
-  // "Could not process PDF". Skip the file instead of poisoning the request.
-  const magicAscii = buffer.subarray(0, 8).toString('latin1').replace(/[^\x20-\x7E]/g, '?');
-  if (mediaType === 'application/pdf') {
-    const isPdf = buffer.length >= 5 && buffer.subarray(0, 5).equals(Buffer.from('%PDF-', 'latin1'));
-    if (!isPdf) {
-      console.warn(
-        `[enhance:doc-block] skipping ${bucket}/${path}: extension is .pdf but file does not start with %PDF- (magic='${magicAscii}', len=${buffer.length})`,
-      );
-      return null;
-    }
+  const magicAscii = buffer
+    .subarray(0, 8)
+    .toString('latin1')
+    .replace(/[^\x20-\x7E]/g, '?');
+
+  // Magic-byte sanity check — refuse to ship mislabelled bytes to Anthropic.
+  // The previous bug surfaced as opaque "Could not process PDF" 4xx; the
+  // image-block equivalent would be "Input should be 'image/png'" etc.
+  const magicKind = classified.kind === 'pdf' ? 'pdf' : classified.mediaType;
+  if (!magicMatches(buffer, magicKind)) {
+    console.warn(
+      `[enhance:doc-block] skipping ${bucket}/${path}: declared ${classified.mediaType} but magic='${magicAscii}' (len=${buffer.length})`,
+    );
+    return null;
   }
 
   // arrayBuffer→Buffer.from→.toString('base64') is the canonical Node binary→base64 path.
   // Do NOT introduce any intermediate string conversion (e.g. .toString('utf-8'))
   // — that would corrupt non-UTF8 bytes irrecoverably.
   const base64 = buffer.toString('base64');
+  const blockType = classified.kind === 'pdf' ? 'document' : 'image';
 
   console.log('[enhance:doc-block] prepared', {
     bucket,
     path,
+    resolvedType: blockType,
     byteLength: buffer.length,
     magicBytes: magicAscii,
     base64Length: base64.length,
     base64Preview: base64.substring(0, 50),
-    mediaType,
+    mediaType: classified.mediaType,
   });
 
   return {
-    type: 'document',
+    type: blockType,
     source: {
       type: 'base64',
-      media_type: mediaType,
+      media_type: classified.mediaType,
       data: base64,
     },
   };
@@ -138,7 +207,7 @@ async function processReport(reportId: string, report: any) {
 
     // Download all report files
     for (const path of storagePaths) {
-      const block = await downloadAsDocBlock(supabase, 'report-pdfs', path);
+      const block = await downloadAsContentBlock(supabase, 'report-pdfs', path);
       if (block) documentBlocks.push(block);
     }
 
@@ -161,7 +230,7 @@ async function processReport(reportId: string, report: any) {
 
     if (allClientFiles && allClientFiles.length > 0) {
       for (const cf of allClientFiles) {
-        const block = await downloadAsDocBlock(supabase, 'client-files', cf.file_path);
+        const block = await downloadAsContentBlock(supabase, 'client-files', cf.file_path);
         if (block) {
           const displayName = cf.file_label || cf.file_name;
           // Wrap the block with a label so Claude knows what each file is
@@ -1073,10 +1142,10 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
     // payload shape (counts, sizes, media_types). Remove once the PDF-upload
     // failure is root-caused.
     const blockSummary = contentBlocks.map((b: any, i: number) => {
-      if (b?.type === 'document') {
+      if (b?.type === 'document' || b?.type === 'image') {
         return {
           index: i,
-          type: 'document',
+          type: b.type,
           mediaType: b.source?.media_type,
           base64Length: typeof b.source?.data === 'string' ? b.source.data.length : 0,
         };
@@ -1090,6 +1159,7 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
       reportId,
       blockCount: contentBlocks.length,
       documentBlockCount: contentBlocks.filter((b: any) => b?.type === 'document').length,
+      imageBlockCount: contentBlocks.filter((b: any) => b?.type === 'image').length,
       blocks: blockSummary,
     });
 
