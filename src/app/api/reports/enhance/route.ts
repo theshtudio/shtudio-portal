@@ -282,13 +282,22 @@ Render ALL of the following sections if the underlying data exists in the PDF:
    Extract the full GA4 channel breakdown table. Render an HTML <table> with columns: Channel, Total Users, New Users, Returning Users, Avg Engagement Time, Engaged Sessions, Event Count. Include all rows (Direct, Organic Search, Referral, Organic Social, Unassigned, etc.). Do not summarise or collapse rows.
 
 2. ORGANIC TRAFFIC PERFORMANCE (monthly time series — REQUIRED if monthly data present)
-   The source PDF typically contains a "Organic Traffic Dynamics" or similar table with monthly breakdowns spanning 12-13 months (e.g. March 2025 → March 2026), with columns Total Users, New Users, Sessions per month. You MUST extract every month's row and render BOTH:
+   The source PDF typically contains a "Organic Traffic Dynamics" or similar table with monthly breakdowns spanning 12-13 months (e.g. March 2025 → March 2026), with columns Total Users, New Users, Sessions per month. You MUST extract every month's row and render a Chart.js line chart titled "Organic Traffic Performance" with TWO lines — Sessions and New Users — across the full month range. Use canvas id="chart-organic-traffic". The chart container must be wrapped in <div class="chart-container">.
 
-   (a) A Chart.js line chart titled "Organic Traffic Performance" with TWO lines — Sessions and New Users — across the full month range. Use canvas id="chart-organic-traffic". The chart container must be wrapped in <div class="chart-container">. Use line colours #2B6CB8 (Sessions) and #4A90D9 (New Users).
+   Line colours — these two specific colours are required for clear contrast on a two-series chart:
+   * Sessions:  #2B6CB8 (primary brand blue)
+   * New Users: #F26522 (Shtudio orange)
 
-   (b) A complete HTML table directly below the chart with columns: Month, Total Users, New Users, Sessions. Include every month present in the source data — do not truncate.
+   Do NOT also render a separate HTML monthly-data table beneath the chart — the chart is the canonical view and Chart.js tooltips already expose the exact value for each month on hover. A duplicate table is redundant and clutters the report.
 
-   Concrete code template you MUST follow for this chart (replace LABELS_JSON, SESSIONS_JSON, NEW_USERS_JSON with real arrays extracted from the PDF; arrays must be the same length and be in chronological order):
+   X-axis labels — compact format to prevent overlap on 12–13 month ranges:
+   * Show the year ONLY on the first label and on January transitions
+   * All other labels are bare month names
+   * Use single-quote two-digit year, e.g. for Mar 2025 → Mar 2026 the labels are:
+       ["Mar '25", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan '26", "Feb", "Mar"]
+   * Inline this exact array shape (year-stamped first label + every January) into the labels: array.
+
+   Concrete code template you MUST follow for this chart (replace LABELS_JSON, SESSIONS_JSON, NEW_USERS_JSON with real arrays extracted from the PDF; arrays must be the same length and be in chronological order; LABELS_JSON must follow the compact format above):
 
    <div class="chart-section">
      <h3>Organic Traffic Performance</h3>
@@ -304,18 +313,18 @@ Render ALL of the following sections if the underlying data exists in the PDF:
        labels: LABELS_JSON,
        datasets: [
          { label: 'Sessions', data: SESSIONS_JSON, borderColor: '#2B6CB8', backgroundColor: 'rgba(43,108,184,0.08)', tension: 0.4, fill: true, borderWidth: 2, pointRadius: 3 },
-         { label: 'New Users', data: NEW_USERS_JSON, borderColor: '#4A90D9', backgroundColor: 'rgba(74,144,217,0.06)', tension: 0.4, fill: false, borderWidth: 2, pointRadius: 3 }
+         { label: 'New Users', data: NEW_USERS_JSON, borderColor: '#F26522', backgroundColor: 'rgba(242,101,34,0.08)', tension: 0.4, fill: false, borderWidth: 2, pointRadius: 3 }
        ]
      },
      options: {
        responsive: true,
        maintainAspectRatio: true,
        plugins: { legend: { position: 'top', labels: { font: { family: 'DM Sans' }, usePointStyle: true } }, tooltip: { backgroundColor: '#1A1A2E', titleColor: '#fff', bodyColor: '#fff' } },
-       scales: { x: { grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { font: { family: 'DM Sans' } } }, y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { font: { family: 'DM Sans' } } } }
+       scales: { x: { grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { font: { family: 'DM Sans' }, autoSkip: false, maxRotation: 45, minRotation: 0 } }, y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { font: { family: 'DM Sans' } } } }
      }
    });
 
-   You MUST inline the actual numeric arrays from the PDF — do not output placeholder strings, do not embed images of charts, and do not omit the chart even if the table is also present. If the PDF only contains a chart image (no underlying table), read the values off the chart axes as accurately as you can.
+   You MUST inline the actual numeric arrays from the PDF — do not output placeholder strings, do not embed images of charts, and do not omit the chart. If the PDF only contains a chart image (no underlying table), read the values off the chart axes as accurately as you can.
 
 3. MONTH-ON-MONTH COMPARISON (if data present)
    Render a table showing current period vs previous period with a % change column, for each channel. Follow it with a 2–3 sentence AI-written narrative interpreting the key changes (what improved, what declined, what to watch).
@@ -357,7 +366,11 @@ Render ALL of the following sections if the underlying data exists in the PDF:
     Reproduce in full, exactly as written in the PDF. Do not shorten.
 
 CHART COLOURS FOR SEO LINE CHARTS:
-For line / area charts in the SEO report, use only these three colours in this order: #2B6CB8 (primary), #4A90D9 (secondary), #1A4A8A (accent). Do not use the wider 6-colour palette listed elsewhere — that's for Google Ads breakdown charts.
+For line / area charts in the SEO report:
+* Primary series: #2B6CB8 (brand blue) — always.
+* Two-series charts that share a single y-axis (e.g. Organic Traffic: Sessions + New Users): use #F26522 (Shtudio orange) for the second series so it's clearly distinguishable from the primary blue.
+* Three-or-more series, or charts where series sit on separate y-axes (e.g. Search Console clicks vs impressions on a dual axis), use #4A90D9 and #1A4A8A as additional colours.
+Do not use the wider 6-colour palette listed elsewhere — that's for Google Ads breakdown charts.
 
 WHAT TO OMIT:
 - Individual URL dumps for external articles placed / backlinks built (mention counts only)
