@@ -230,6 +230,25 @@
   margin-bottom: var(--space-5);
 }
 
+.modalTitleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.modalPendingPill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: #fff3cd;
+  color: #8a6d3b;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .modalBody {
   font-size: var(--text-sm);
   color: var(--color-dark-400);

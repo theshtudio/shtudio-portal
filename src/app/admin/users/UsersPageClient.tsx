@@ -254,6 +254,7 @@ export function UsersPageClient({
           profile={manageProfile}
           isSelf={manageProfile.id === currentUserId}
           isTargetSuperAdmin={manageProfile.email?.toLowerCase() === 'alex@shtud.io'}
+          isPending={pendingSet.has(manageProfile.id)}
           onClose={() => setManageId(null)}
           onUpdated={handleProfileUpdated}
           onDeleted={handleProfileDeleted}

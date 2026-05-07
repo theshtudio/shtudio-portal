@@ -10,6 +10,7 @@ interface ManageUserModalProps {
   profile: Profile;
   isSelf: boolean;
   isTargetSuperAdmin: boolean;
+  isPending: boolean;
   onClose: () => void;
   onUpdated: (next: Profile) => void;
   onDeleted: (id: string) => void;
@@ -19,6 +20,7 @@ export function ManageUserModal({
   profile,
   isSelf,
   isTargetSuperAdmin,
+  isPending,
   onClose,
   onUpdated,
   onDeleted,
@@ -29,6 +31,8 @@ export function ManageUserModal({
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [resetSent, setResetSent] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resentInvite, setResentInvite] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
@@ -49,9 +53,18 @@ export function ManageUserModal({
   const canEditEmail = !isTargetSuperAdmin;
   const dirty = nameChanged || (canEditEmail && emailChanged);
 
+  // Self-management rules: Alex can edit his own name, but cannot toggle
+  // his own permission, delete himself, or send himself a password reset
+  // (he can use the regular forgot-password flow). Email is already locked
+  // for the super admin via canEditEmail.
+  const showCanDeleteSection = !isPending;
+  const showPasswordReset = !isPending && !isSelf;
+  const showResendInvite = isPending;
+
   async function handleSave() {
     setError('');
     setSuccess('');
+    setResentInvite(false);
     if (!trimmedName) {
       setError('Name cannot be empty.');
       return;
@@ -78,7 +91,13 @@ export function ManageUserModal({
         return;
       }
       onUpdated(json.profile as Profile);
-      setSuccess('Saved.');
+      if (json.warning) {
+        setError(json.warning);
+      } else if (isPending && emailChanged) {
+        setSuccess('Saved. New invite sent to the updated email.');
+      } else {
+        setSuccess('Saved.');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save changes.');
     } finally {
@@ -132,6 +151,28 @@ export function ManageUserModal({
     }
   }
 
+  async function handleResendInvite() {
+    setError('');
+    setSuccess('');
+    setResentInvite(false);
+    setResending(true);
+    try {
+      const res = await fetch(`/api/admin/users/${profile.id}/resend-invite`, {
+        method: 'POST',
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(json.error ?? 'Failed to resend invite.');
+        return;
+      }
+      setResentInvite(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to resend invite.');
+    } finally {
+      setResending(false);
+    }
+  }
+
   async function handleDelete() {
     setError('');
     setDeleting(true);
@@ -155,14 +196,19 @@ export function ManageUserModal({
   }
 
   const displayName = trimmedName || profile.email;
-  const busy = saving || resetting || deleting;
+  const busy = saving || resetting || resending || deleting;
 
   return (
     <div className={styles.modalOverlay} onClick={() => !busy && !confirmDelete && onClose()}>
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <div className={styles.modalHeader}>
           <div>
-            <h3 className={styles.modalTitle}>Manage user</h3>
+            <div className={styles.modalTitleRow}>
+              <h3 className={styles.modalTitle}>Manage user</h3>
+              {isPending && (
+                <span className={styles.modalPendingPill}>Pending invitation</span>
+              )}
+            </div>
             <p className={styles.modalSubtitle}>{profile.email}</p>
           </div>
           <button
@@ -192,7 +238,13 @@ export function ManageUserModal({
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           disabled={saving || !canEditEmail}
-          hint={!canEditEmail ? 'Super admin email cannot be changed.' : undefined}
+          hint={
+            !canEditEmail
+              ? 'Super admin email cannot be changed.'
+              : isPending
+                ? 'Saving a new email will resend the invite to that address.'
+                : undefined
+          }
         />
 
         <div className={styles.modalActions}>
@@ -204,45 +256,69 @@ export function ManageUserModal({
           </Button>
         </div>
 
-        <div className={styles.modalSection}>
-          <div className={styles.modalSectionTitle}>File deletion permission</div>
-          <div className={styles.modalActionRow}>
-            <label className={styles.toggleWrap}>
-              <input
-                type="checkbox"
-                checked={canDelete}
-                disabled={saving || isTargetSuperAdmin || isSelf}
-                onChange={(e) => handleToggleCanDelete(e.target.checked)}
-              />
-              <span>{canDelete ? 'Can delete files' : 'Cannot delete files'}</span>
-            </label>
+        {showCanDeleteSection && (
+          <div className={styles.modalSection}>
+            <div className={styles.modalSectionTitle}>File deletion permission</div>
+            <div className={styles.modalActionRow}>
+              <label className={styles.toggleWrap}>
+                <input
+                  type="checkbox"
+                  checked={canDelete}
+                  disabled={saving || isTargetSuperAdmin || isSelf}
+                  onChange={(e) => handleToggleCanDelete(e.target.checked)}
+                />
+                <span>{canDelete ? 'Can delete files' : 'Cannot delete files'}</span>
+              </label>
+            </div>
+            {(isTargetSuperAdmin || isSelf) && (
+              <p className={styles.modalNote}>
+                {isTargetSuperAdmin
+                  ? 'The super admin always retains delete permission.'
+                  : 'You cannot change your own permissions.'}
+              </p>
+            )}
           </div>
-          {(isTargetSuperAdmin || isSelf) && (
-            <p className={styles.modalNote}>
-              {isTargetSuperAdmin
-                ? 'The super admin always retains delete permission.'
-                : 'You cannot change your own permissions.'}
-            </p>
-          )}
-        </div>
+        )}
 
-        <div className={styles.modalSection}>
-          <div className={styles.modalSectionTitle}>Password</div>
-          <div className={styles.modalActionRow}>
-            <span className={styles.modalNote}>
-              Send a recovery email so {displayName} can set a new password.
-            </span>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleResetPassword}
-              loading={resetting}
-              disabled={busy}
-            >
-              {resetSent ? 'Sent ✓' : 'Send Password Reset'}
-            </Button>
+        {showResendInvite && (
+          <div className={styles.modalSection}>
+            <div className={styles.modalSectionTitle}>Invitation</div>
+            <div className={styles.modalActionRow}>
+              <span className={styles.modalNote}>
+                Resend the invite link to {profile.email}.
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleResendInvite}
+                loading={resending}
+                disabled={busy}
+              >
+                {resentInvite ? 'Sent ✓' : 'Resend Invite'}
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
+
+        {showPasswordReset && (
+          <div className={styles.modalSection}>
+            <div className={styles.modalSectionTitle}>Password</div>
+            <div className={styles.modalActionRow}>
+              <span className={styles.modalNote}>
+                Send a recovery email so {displayName} can set a new password.
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleResetPassword}
+                loading={resetting}
+                disabled={busy}
+              >
+                {resetSent ? 'Sent ✓' : 'Send Password Reset'}
+              </Button>
+            </div>
+          </div>
+        )}
 
         <div className={styles.modalSection}>
           <div className={styles.modalSectionTitle}>Danger zone</div>

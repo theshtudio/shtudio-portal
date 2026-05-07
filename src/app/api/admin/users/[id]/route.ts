@@ -1,6 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
 import { isSuperAdmin, SUPER_ADMIN_EMAIL } from '@/lib/auth/superAdmin';
+import { sendPasswordResetEmail } from '@/lib/email';
+
+type AuditEntry = {
+  user_id: string;
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  metadata: Record<string, unknown>;
+};
+
+async function writeAudit(adminSupabase: SupabaseClient, entry: AuditEntry) {
+  try {
+    const { error } = await adminSupabase.from('audit_log').insert(entry);
+    if (error) {
+      console.error('[audit_log] insert failed:', entry.action, error.message);
+    }
+  } catch (err) {
+    console.error('[audit_log] insert threw:', entry.action, err);
+  }
+}
 
 export async function PATCH(
   request: NextRequest,
@@ -48,7 +69,7 @@ export async function PATCH(
 
   const { data: target, error: lookupError } = await adminSupabase
     .from('profiles')
-    .select('id, email')
+    .select('id, email, full_name, can_delete_files')
     .eq('id', id)
     .single();
 
@@ -71,11 +92,20 @@ export async function PATCH(
     );
   }
 
-  if (hasEmail && email && email !== target.email?.toLowerCase()) {
+  const beforeName = (target.full_name ?? '').trim();
+  const beforeEmail = target.email?.toLowerCase() ?? '';
+  const beforeCanDelete = target.can_delete_files;
+
+  const nameChanged = hasFullName && fullName !== beforeName;
+  const emailChanged = hasEmail && email !== beforeEmail;
+  const canDeleteChanged = hasCanDelete && body.can_delete_files !== beforeCanDelete;
+
+  let isPending = false;
+  if (emailChanged) {
     const { data: existing } = await adminSupabase
       .from('profiles')
       .select('id')
-      .eq('email', email)
+      .eq('email', email!)
       .neq('id', id)
       .maybeSingle();
     if (existing) {
@@ -85,8 +115,15 @@ export async function PATCH(
       );
     }
 
+    const { data: authResult, error: authLookupError } =
+      await adminSupabase.auth.admin.getUserById(id);
+    if (authLookupError) {
+      return NextResponse.json({ error: authLookupError.message }, { status: 500 });
+    }
+    isPending = !authResult?.user?.last_sign_in_at;
+
     const { error: authUpdateError } = await adminSupabase.auth.admin.updateUserById(id, {
-      email,
+      email: email!,
       email_confirm: true,
     });
     if (authUpdateError) {
@@ -110,7 +147,75 @@ export async function PATCH(
     return NextResponse.json({ error: updateError.message }, { status: 500 });
   }
 
-  return NextResponse.json({ profile: updated });
+  // Best-effort: send a fresh password-setup link to the new address so the
+  // pending user has a working path in. inviteUserByEmail errors when the
+  // auth user already exists, so we use the recovery-link flow instead — it
+  // works for never-signed-in users and lands them on /auth/set-password.
+  let reinviteWarning: string | undefined;
+  if (emailChanged && isPending) {
+    const baseUrl =
+      process.env.NEXT_PUBLIC_SITE_URL ?? 'https://portal.shtudio.com.au';
+    const redirectTo = `${baseUrl.replace(/\/$/, '')}/auth/set-password`;
+    try {
+      const { data: linkData, error: linkError } =
+        await adminSupabase.auth.admin.generateLink({
+          type: 'recovery',
+          email: email!,
+          options: { redirectTo },
+        });
+      if (linkError || !linkData?.properties?.action_link) {
+        throw new Error(linkError?.message ?? 'Failed to generate recovery link.');
+      }
+      const result = await sendPasswordResetEmail({
+        to: email!,
+        fullName: updated.full_name,
+        actionLink: linkData.properties.action_link,
+      });
+      if (!result.sent) {
+        reinviteWarning =
+          'Email updated, but the new invite was not sent (RESEND_API_KEY missing). ' +
+          'Use Resend Invite to retry.';
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      console.error('[invite] auto re-invite after email change failed:', message);
+      reinviteWarning = `Email updated, but resending the invite failed: ${message}`;
+    }
+  }
+
+  if (nameChanged) {
+    await writeAudit(adminSupabase, {
+      user_id: user.id,
+      action: 'user.name_updated',
+      resource_type: 'user',
+      resource_id: id,
+      metadata: { before: beforeName, after: fullName },
+    });
+  }
+  if (emailChanged) {
+    await writeAudit(adminSupabase, {
+      user_id: user.id,
+      action: 'user.email_updated',
+      resource_type: 'user',
+      resource_id: id,
+      metadata: { before: beforeEmail, after: email, was_pending: isPending },
+    });
+  }
+  if (canDeleteChanged) {
+    await writeAudit(adminSupabase, {
+      user_id: user.id,
+      action: 'user.permission_updated',
+      resource_type: 'user',
+      resource_id: id,
+      metadata: {
+        field: 'can_delete_files',
+        before: beforeCanDelete,
+        after: body.can_delete_files,
+      },
+    });
+  }
+
+  return NextResponse.json({ profile: updated, warning: reinviteWarning });
 }
 
 export async function DELETE(
@@ -142,9 +247,10 @@ export async function DELETE(
 
   const adminSupabase = createServiceSupabase();
 
+  // Capture identity *before* deleteUser cascades the profile row.
   const { data: target, error: lookupError } = await adminSupabase
     .from('profiles')
-    .select('id, email')
+    .select('id, email, full_name')
     .eq('id', id)
     .single();
 
@@ -163,6 +269,17 @@ export async function DELETE(
   if (deleteError) {
     return NextResponse.json({ error: deleteError.message }, { status: 500 });
   }
+
+  await writeAudit(adminSupabase, {
+    user_id: user.id,
+    action: 'user.deleted',
+    resource_type: 'user',
+    resource_id: id,
+    metadata: {
+      email: target.email,
+      full_name: target.full_name,
+    },
+  });
 
   return NextResponse.json({ ok: true });
 }
