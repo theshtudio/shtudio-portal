@@ -11,16 +11,18 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
 });
 
-// Map file extensions/types to Anthropic media types
-function getMediaType(path: string, contentType?: string): string {
+// Map file extensions/types to Anthropic media types.
+// Returns null for extensions we don't support — callers MUST skip those
+// rather than send them to Anthropic with a guessed media_type.
+function getMediaType(path: string): string | null {
   const ext = path.split('.').pop()?.toLowerCase();
-  if (ext === 'pdf' || contentType === 'application/pdf') return 'application/pdf';
-  if (ext === 'docx' || contentType?.includes('wordprocessingml')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-  if (ext === 'doc' || contentType === 'application/msword') return 'application/msword';
-  if (ext === 'xlsx' || contentType?.includes('spreadsheetml')) return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-  if (ext === 'xls' || contentType === 'application/vnd.ms-excel') return 'application/vnd.ms-excel';
+  if (ext === 'pdf') return 'application/pdf';
+  if (ext === 'docx') return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  if (ext === 'doc') return 'application/msword';
+  if (ext === 'xlsx') return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  if (ext === 'xls') return 'application/vnd.ms-excel';
   if (ext === 'csv') return 'text/csv';
-  return 'application/pdf';
+  return null;
 }
 
 // Download a file from storage and return as a content block for Claude
@@ -59,9 +61,45 @@ async function downloadAsDocBlock(
     }
   }
 
-  // For PDFs and other supported types, send as base64 document block
-  const base64 = buffer.toString('base64');
+  // For PDFs and other supported binary types, send as base64 document block.
+  // media_type is hardcoded per extension — never read from Storage metadata,
+  // which can come back as application/octet-stream.
   const mediaType = getMediaType(path);
+  if (!mediaType) {
+    console.warn(
+      `[enhance:doc-block] skipping unsupported file ${bucket}/${path} (no media_type mapping for ext='${ext ?? ''}')`,
+    );
+    return null;
+  }
+
+  // Magic-byte sanity check for PDFs: refuse to send a non-PDF buffer with
+  // media_type='application/pdf' to Anthropic — that's exactly what trips
+  // "Could not process PDF". Skip the file instead of poisoning the request.
+  const magicAscii = buffer.subarray(0, 8).toString('latin1').replace(/[^\x20-\x7E]/g, '?');
+  if (mediaType === 'application/pdf') {
+    const isPdf = buffer.length >= 5 && buffer.subarray(0, 5).equals(Buffer.from('%PDF-', 'latin1'));
+    if (!isPdf) {
+      console.warn(
+        `[enhance:doc-block] skipping ${bucket}/${path}: extension is .pdf but file does not start with %PDF- (magic='${magicAscii}', len=${buffer.length})`,
+      );
+      return null;
+    }
+  }
+
+  // arrayBuffer→Buffer.from→.toString('base64') is the canonical Node binary→base64 path.
+  // Do NOT introduce any intermediate string conversion (e.g. .toString('utf-8'))
+  // — that would corrupt non-UTF8 bytes irrecoverably.
+  const base64 = buffer.toString('base64');
+
+  console.log('[enhance:doc-block] prepared', {
+    bucket,
+    path,
+    byteLength: buffer.length,
+    magicBytes: magicAscii,
+    base64Length: base64.length,
+    base64Preview: base64.substring(0, 50),
+    mediaType,
+  });
 
   return {
     type: 'document',
@@ -955,6 +993,30 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
         text: promptText,
       },
     ];
+
+    // Pre-flight summary so we can correlate Anthropic 400s with the exact
+    // payload shape (counts, sizes, media_types). Remove once the PDF-upload
+    // failure is root-caused.
+    const blockSummary = contentBlocks.map((b: any, i: number) => {
+      if (b?.type === 'document') {
+        return {
+          index: i,
+          type: 'document',
+          mediaType: b.source?.media_type,
+          base64Length: typeof b.source?.data === 'string' ? b.source.data.length : 0,
+        };
+      }
+      if (b?.type === 'text') {
+        return { index: i, type: 'text', textLength: typeof b.text === 'string' ? b.text.length : 0 };
+      }
+      return { index: i, type: b?.type ?? 'unknown' };
+    });
+    console.log('[enhance:pre-call]', {
+      reportId,
+      blockCount: contentBlocks.length,
+      documentBlockCount: contentBlocks.filter((b: any) => b?.type === 'document').length,
+      blocks: blockSummary,
+    });
 
     // Call Claude API
     const message = await anthropic.messages.create({
