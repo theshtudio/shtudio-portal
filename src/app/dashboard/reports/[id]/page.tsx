@@ -1,6 +1,7 @@
 import { createServerSupabase } from '@/lib/supabase/server';
 import { format } from 'date-fns';
 import Link from 'next/link';
+import { ReportHtml } from '@/components/ReportHtml/ReportHtml';
 import styles from './page.module.css';
 
 export default async function ClientReportPage({
@@ -46,9 +47,9 @@ export default async function ClientReportPage({
         </div>
       </div>
 
-      <div
+      <ReportHtml
         className={styles.reportContent}
-        dangerouslySetInnerHTML={{ __html: report.ai_enhanced_html }}
+        html={report.ai_enhanced_html}
       />
 
       <div className={styles.footer}>

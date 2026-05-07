@@ -10,6 +10,7 @@ import { ClientMismatchBanner } from './ClientMismatchBanner';
 import { ProcessingProgress } from './ProcessingProgress';
 import { EditableTitle } from './EditableTitle';
 import { ReportDetailsCard } from './ReportDetailsCard';
+import { ReportHtml } from '@/components/ReportHtml/ReportHtml';
 import type { ReportCommentWithAuthor } from '@/lib/types';
 import styles from './page.module.css';
 
@@ -145,9 +146,9 @@ export default async function ReportDetailPage({
         <h2 className={styles.sectionTitle}>Report Preview</h2>
 
         {report.ai_status === 'completed' && report.ai_enhanced_html ? (
-          <div
+          <ReportHtml
             className={styles.htmlPreview}
-            dangerouslySetInnerHTML={{ __html: report.ai_enhanced_html }}
+            html={report.ai_enhanced_html}
           />
         ) : report.ai_status === 'processing' ? (
           <ProcessingProgress reportId={report.id} />
