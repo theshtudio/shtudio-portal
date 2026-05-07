@@ -7,6 +7,9 @@ export interface Profile {
   full_name: string | null;
   role: UserRole;
   avatar_url: string | null;
+  can_delete_files: boolean;
+  invited_by: string | null;
+  invited_at: string | null;
   created_at: string;
   updated_at: string;
 }

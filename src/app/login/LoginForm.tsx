@@ -25,7 +25,10 @@ export function LoginForm() {
     });
 
     if (error) {
-      setError(error.message);
+      const message = /invalid login credentials/i.test(error.message)
+        ? 'That email and password combination did not work. If you have not been invited to the portal, please contact your administrator — self sign-up is disabled.'
+        : error.message;
+      setError(message);
       setLoading(false);
       return;
     }

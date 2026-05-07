@@ -16,6 +16,7 @@ const navItems = [
   { href: '/admin/clients', label: 'Clients', icon: '👥' },
   { href: '/admin/reports/upload', label: 'Upload Report', icon: '📄' },
   { href: '/admin/knowledge-base', label: 'Knowledge Base', icon: '📚' },
+  { href: '/admin/users', label: 'Team', icon: '🧑‍💼' },
 ];
 
 export function AdminSidebar({ profile }: AdminSidebarProps) {
