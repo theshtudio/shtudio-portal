@@ -5,10 +5,12 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/Button/Button';
 import { Input } from '@/components/Input/Input';
 import type { Profile } from '@/lib/types';
+import { ManageUserModal } from './ManageUserModal';
 import styles from './page.module.css';
 
 interface UsersPageClientProps {
   currentUserEmail: string;
+  currentUserId: string;
   isSuperAdmin: boolean;
   initialAdmins: Profile[];
   pendingUserIds: string[];
@@ -25,6 +27,7 @@ function formatDate(value: string | null): string {
 
 export function UsersPageClient({
   currentUserEmail,
+  currentUserId,
   isSuperAdmin,
   initialAdmins,
   pendingUserIds,
@@ -37,18 +40,16 @@ export function UsersPageClient({
   useEffect(() => {
     setAdmins(initialAdmins);
   }, [initialAdmins]);
+
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
   const [inviteError, setInviteError] = useState('');
   const [inviteSuccess, setInviteSuccess] = useState('');
   const [inviting, setInviting] = useState(false);
-  const [togglingId, setTogglingId] = useState<string | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [resentId, setResentId] = useState<string | null>(null);
-  const [resettingId, setResettingId] = useState<string | null>(null);
-  const [resetSentId, setResetSentId] = useState<string | null>(null);
-  const [resetError, setResetError] = useState<{ id: string; message: string } | null>(null);
   const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
+  const [manageId, setManageId] = useState<string | null>(null);
 
   async function handleResend(profile: Profile) {
     setRowError(null);
@@ -71,33 +72,6 @@ export function UsersPageClient({
       });
     } finally {
       setResendingId(null);
-    }
-  }
-
-  async function handleSendPasswordReset(profile: Profile) {
-    setResetError(null);
-    setResetSentId(null);
-    setResettingId(profile.id);
-    try {
-      const res = await fetch(`/api/admin/users/${profile.id}/send-password-reset`, {
-        method: 'POST',
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setResetError({
-          id: profile.id,
-          message: json.error ?? 'Failed to send password reset.',
-        });
-        return;
-      }
-      setResetSentId(profile.id);
-    } catch (err) {
-      setResetError({
-        id: profile.id,
-        message: err instanceof Error ? err.message : 'Failed to send password reset.',
-      });
-    } finally {
-      setResettingId(null);
     }
   }
 
@@ -129,32 +103,17 @@ export function UsersPageClient({
     }
   }
 
-  async function handleToggleDelete(profile: Profile, next: boolean) {
-    setRowError(null);
-    setTogglingId(profile.id);
-    try {
-      const res = await fetch(`/api/admin/users/${profile.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ can_delete_files: next }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setRowError({ id: profile.id, message: json.error ?? 'Failed to update permission.' });
-        return;
-      }
-      setAdmins((prev) =>
-        prev.map((p) => (p.id === profile.id ? { ...p, can_delete_files: next } : p)),
-      );
-    } catch (err) {
-      setRowError({
-        id: profile.id,
-        message: err instanceof Error ? err.message : 'Failed to update permission.',
-      });
-    } finally {
-      setTogglingId(null);
-    }
+  function handleProfileUpdated(next: Profile) {
+    setAdmins((prev) => prev.map((p) => (p.id === next.id ? { ...p, ...next } : p)));
   }
+
+  function handleProfileDeleted(id: string) {
+    setAdmins((prev) => prev.filter((p) => p.id !== id));
+    setManageId(null);
+    router.refresh();
+  }
+
+  const manageProfile = manageId ? admins.find((p) => p.id === manageId) ?? null : null;
 
   return (
     <>
@@ -169,8 +128,8 @@ export function UsersPageClient({
 
       {!isSuperAdmin && (
         <div className={styles.notice}>
-          Only the super admin (alex@shtud.io) can invite new team members or change delete
-          permissions.
+          Only the super admin (alex@shtud.io) can invite new team members or manage user
+          accounts.
         </div>
       )}
 
@@ -213,7 +172,7 @@ export function UsersPageClient({
               <th>Joined</th>
               <th>Permissions</th>
               <th>Status</th>
-              {isSuperAdmin && <th>Can delete files</th>}
+              {isSuperAdmin && <th></th>}
             </tr>
           </thead>
           <tbody>
@@ -266,45 +225,21 @@ export function UsersPageClient({
                         )}
                       </div>
                     ) : (
-                      <div className={styles.statusCell}>
-                        <span className={styles.activeBadge}>Active</span>
-                        {isSuperAdmin && p.invited_by && !isSuper && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            loading={resettingId === p.id}
-                            onClick={() => handleSendPasswordReset(p)}
-                          >
-                            Send Password Reset
-                          </Button>
-                        )}
-                        {resetSentId === p.id && (
-                          <span className={styles.resentNote}>Sent ✓</span>
-                        )}
-                      </div>
+                      <span className={styles.activeBadge}>Active</span>
                     )}
-                    {rowError?.id === p.id && !isSuperAdmin && (
+                    {rowError?.id === p.id && (
                       <div className={styles.rowError}>{rowError.message}</div>
-                    )}
-                    {resetError?.id === p.id && (
-                      <div className={styles.rowError}>{resetError.message}</div>
                     )}
                   </td>
                   {isSuperAdmin && (
                     <td>
-                      <label className={styles.toggleWrap}>
-                        <input
-                          type="checkbox"
-                          checked={p.can_delete_files}
-                          disabled={togglingId === p.id || isSuper}
-                          onChange={(e) => handleToggleDelete(p, e.target.checked)}
-                        />
-                        <span>{p.can_delete_files ? 'On' : 'Off'}</span>
-                      </label>
-                      {rowError?.id === p.id && (
-                        <div className={styles.rowError}>{rowError.message}</div>
-                      )}
+                      <button
+                        type="button"
+                        className={styles.manageBtn}
+                        onClick={() => setManageId(p.id)}
+                      >
+                        Manage
+                      </button>
                     </td>
                   )}
                 </tr>
@@ -313,6 +248,17 @@ export function UsersPageClient({
           </tbody>
         </table>
       </div>
+
+      {manageProfile && (
+        <ManageUserModal
+          profile={manageProfile}
+          isSelf={manageProfile.id === currentUserId}
+          isTargetSuperAdmin={manageProfile.email?.toLowerCase() === 'alex@shtud.io'}
+          onClose={() => setManageId(null)}
+          onUpdated={handleProfileUpdated}
+          onDeleted={handleProfileDeleted}
+        />
+      )}
     </>
   );
 }
