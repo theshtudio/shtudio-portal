@@ -474,6 +474,24 @@ Examples of positives that are often present even in declining periods:
 
 If genuinely no positives exist in the data, frame the period as a "recalibration month" and focus the narrative on the specific actions being taken to address what underperformed. Never write a report that reads as purely negative.
 
+WHICH METRICS BELONG IN THE OPENER:
+When leading with positives, prefer engagement and quality metrics over efficiency and cost metrics. Engagement metrics tell the client "your audience is still engaged", which is the morale-correct opening. Cost metrics, even when framed positively (e.g. "CPC came down"), read as defensive in the opener — they belong in the analysis that follows the cards / data tables, not in the lead.
+
+Prefer in the opener:
+* CTR
+* Audience reach / impressions / new users
+* Search Impression Share, brand-search volume
+* Engagement Rate, engaged sessions, average engagement time
+* Conversions or conversion rate when up
+* A standout campaign or channel by name (e.g. "the Sale Event campaign drove 38% of total clicks")
+
+Do NOT lead with in the opener:
+* Avg CPC, Cost per Conversion, CPM, Cost per Lead, Cost / Spend / Budget — even when these moved in a favourable direction
+* Bounce rate, even if down
+* Avg Position movement on its own (a position shift only matters once paired with the click/impression context)
+
+If only cost/efficiency metrics improved and no engagement metrics did, lead with the most relevant engagement metric staying steady — e.g. "CTR held above industry benchmark at 7.6% even as overall volume softened." A held-steady engagement metric is a stronger opener than a moved cost metric.
+
 Required structure for the opening narrative:
 1. The hero summary / "How did [month] go?" paragraph opens with 1–2 sentences highlighting a genuine bright spot from the data — even if overall performance declined. Acknowledge the broader picture honestly in the next sentence; don't pretend a bad month was good.
 2. Then the cards / data tables — these contain both good and bad metrics, and that's fine, the data is what it is.
