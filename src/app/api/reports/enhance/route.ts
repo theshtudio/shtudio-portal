@@ -289,7 +289,7 @@ ${r.ai_enhanced_html}
 Based on the historical data above, include a "Trends & Comparison" section showing:
 1. Month-on-month changes from the most recent previous report
 2. Longer-term trends across multiple reporting periods where data is available
-Use the .m-change.up / .m-change.down pill styles for positive/negative changes.`;
+Apply the DELTA BADGE DIRECTION rules below when choosing pill colours — colour signals "good for the client" / "bad for the client", not raw numerical direction.`;
     }
 
     // Build report type + options instructions
@@ -459,7 +459,95 @@ Then output the complete HTML report starting with <!DOCTYPE html>. The four lin
 
 You are a digital marketing report specialist for Shtudio, a Sydney digital agency.
 
-Your task is to produce a complete, self-contained HTML file for ${clientName}${periodInfo} that matches the exact design standard of the reference template below. The attached document(s) contain all the raw data and metrics you need — extract everything from them.${reportTypeInstructions}${documentBlocks.length > 1 ? `
+Your task is to produce a complete, self-contained HTML file for ${clientName}${periodInfo} that matches the exact design standard of the reference template below. The attached document(s) contain all the raw data and metrics you need — extract everything from them.
+
+TONE & STRUCTURE — CRITICAL (applies to every report type):
+Reports must always lead with positives where they exist, even small ones, before discussing what needs attention. A report that reads as a list of bad news erodes the client's confidence in the agency, even when the underlying nuance is real. Find the angle.
+
+Examples of positives that are often present even in declining periods:
+* A specific campaign / channel / ad set / page that performed well, even if overall performance dipped
+* Quality metrics holding steady (e.g. CTR stable while volume dropped — audience targeting still working)
+* Cost efficiency improvements (CPC down, cost-per-conversion down) even if total volume is also down
+* New users or new audiences reached
+* Year-over-year comparisons that paint a different picture than month-over-month
+* Pipeline / leading indicators (impressions, reach, engaged sessions) even if conversions lagged
+
+If genuinely no positives exist in the data, frame the period as a "recalibration month" and focus the narrative on the specific actions being taken to address what underperformed. Never write a report that reads as purely negative.
+
+WHICH METRICS BELONG IN THE OPENER:
+When leading with positives, prefer engagement and quality metrics over efficiency and cost metrics. Engagement metrics tell the client "your audience is still engaged", which is the morale-correct opening. Cost metrics, even when framed positively (e.g. "CPC came down"), read as defensive in the opener — they belong in the analysis that follows the cards / data tables, not in the lead.
+
+Prefer in the opener:
+* CTR
+* Audience reach / impressions / new users
+* Search Impression Share, brand-search volume
+* Engagement Rate, engaged sessions, average engagement time
+* Conversions or conversion rate when up
+* A standout campaign or channel by name (e.g. "the Sale Event campaign drove 38% of total clicks")
+
+Do NOT lead with in the opener:
+* Avg CPC, Cost per Conversion, CPM, Cost per Lead, Cost / Spend / Budget — even when these moved in a favourable direction
+* Bounce rate, even if down
+* Avg Position movement on its own (a position shift only matters once paired with the click/impression context)
+
+If only cost/efficiency metrics improved and no engagement metrics did, lead with the most relevant engagement metric staying steady — e.g. "CTR held above industry benchmark at 7.6% even as overall volume softened." A held-steady engagement metric is a stronger opener than a moved cost metric.
+
+Required structure for the opening narrative:
+1. The hero summary / "How did [month] go?" paragraph opens with 1–2 sentences highlighting a genuine bright spot from the data — even if overall performance declined. Acknowledge the broader picture honestly in the next sentence; don't pretend a bad month was good.
+2. Then the cards / data tables — these contain both good and bad metrics, and that's fine, the data is what it is.
+3. Then a forward-looking "Areas to Address" or "What we're focusing on next" section that's specific (which campaign / which metric / what's being changed) rather than just listing what went wrong.
+
+Do NOT become saccharine or dishonest — clients can spot a report that's just spinning numbers. If a metric dropped 30%, say so clearly. If conversions halved, name it. The goal is professional context, not happy-talk. Every framing claim must be supportable by the data.
+
+DELTA BADGE DIRECTION — CRITICAL:
+Every change badge (<span class="m-change ...">▲ X% / ▼ X%</span>) carries a colour signal: green = good for the client, red = bad for the client, neutral grey = no clear good/bad direction. The arrow inside the span always reflects the actual numerical change (▲ for positive change, ▼ for negative change). Only the COLOUR reflects whether that change is good or bad, and that depends on the metric.
+
+Available pill classes:
+* .m-change.up         — green, ▲, used when a higher-is-better metric went up
+* .m-change.down       — red,   ▼, used when a higher-is-better metric went down
+* .m-change.good-down  — green, ▼, used when a lower-is-better metric went down (good)
+* .m-change.bad-up     — red,   ▲, used when a lower-is-better metric went up (bad)
+* .m-change.neutral    — grey, either arrow, used for descriptive labels and contextual metrics
+
+For PAID-AD reports (Google Ads, Meta Ads, Microsoft Ads, LinkedIn Ads, Combined):
+
+Higher is better — positive ▲ uses .m-change.up (green), negative ▼ uses .m-change.down (red):
+* Clicks
+* Impressions
+* CTR
+* Conversions
+* Conversion Rate
+* Conversion Value
+* ROAS / Return on Ad Spend
+* Reach
+* Engagement Rate
+* Video Views
+
+Lower is better — positive ▲ uses .m-change.bad-up (red), negative ▼ uses .m-change.good-down (green):
+* Average CPC (cost per click)
+* Cost per Conversion / CPA
+* CPM
+* Cost per Lead
+* Bounce Rate
+
+Neutral / contextual — always .m-change.neutral (grey) regardless of direction. Show the % change but no green/red interpretation:
+* Cost / Spend / Budget — going up isn't inherently bad if it's driving more conversions; going down isn't inherently good if it's because the campaign was paused
+* Search Impression Share — usually higher is better but context matters
+* Active Campaigns / Active Ad Sets / Active Ads — counts, not performance metrics
+
+For SEO reports, the inversions are:
+
+Lower is better (use .m-change.good-down for ▼, .m-change.bad-up for ▲):
+* Bounce Rate
+* Average Position — position 1 is the top of search results, so going from 8 → 5 is GOOD even though the number went down
+
+Higher is better — default green ▲ / red ▼ (current behaviour):
+* Sessions, Users, New Users, Engaged Sessions, Avg Engagement Time
+* Clicks, Impressions, CTR (Search Console)
+* Organic Keywords, Referring Domains, Backlinks, Authority Score
+* Traffic Share
+
+Always pair the colour class with the actual direction arrow — never write a green ▼ where the data shows a positive change, never write a red ▲ for 0% change. If the % change is exactly 0 or you don't have comparison data, use .m-change.neutral.${reportTypeInstructions}${documentBlocks.length > 1 ? `
 
 NOTE: Multiple report files have been attached. Use data from ALL of them to build a comprehensive report.` : ''}${clientFileBlocks.length > 0 ? `
 
@@ -752,6 +840,7 @@ Here is your design template:
   .m-change.up { background: #DCFCE7; color: var(--green); }
   .m-change.down { background: #FEE2E2; color: var(--red); }
   .m-change.good-down { background: #DCFCE7; color: var(--green); }
+  .m-change.bad-up { background: #FEE2E2; color: var(--red); }
   .m-change.neutral { background: #F1F5F9; color: var(--mid); }
 
   /* -- CHART FALLBACKS -- */
