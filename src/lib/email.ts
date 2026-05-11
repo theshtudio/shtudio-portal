@@ -8,6 +8,57 @@ interface ReportCompletedEmailParams {
   reportId: string;
 }
 
+interface PasswordResetEmailParams {
+  to: string;
+  fullName: string | null;
+  actionLink: string;
+}
+
+export async function sendPasswordResetEmail({
+  to,
+  fullName,
+  actionLink,
+}: PasswordResetEmailParams) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.warn('[email] RESEND_API_KEY is not set — skipping password reset email');
+    return { sent: false as const };
+  }
+
+  const resend = new Resend(apiKey);
+  const greeting = fullName ? `Hi ${fullName.split(' ')[0]},` : 'Hi,';
+
+  await resend.emails.send({
+    from: 'Shtudio Portal <notifications@shtudio.com.au>',
+    to,
+    subject: 'Set your Shtudio Portal password',
+    html: `
+      <div style="font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px;">
+        <div style="margin-bottom: 24px;">
+          <img src="${BASE_URL}/logo.png" alt="Shtudio" style="height: 28px;" />
+        </div>
+        <h1 style="font-size: 22px; font-weight: 600; color: #1A1A2E; margin-bottom: 8px;">
+          Set your password
+        </h1>
+        <p style="font-size: 14px; color: #6B7280; line-height: 1.6; margin-bottom: 24px;">
+          ${greeting} use the link below to set a password for your Shtudio Portal account.
+          This link will expire in 1 hour.
+        </p>
+        <div style="margin-bottom: 32px;">
+          <a href="${actionLink}" style="display: inline-block; padding: 12px 22px; background: #F26522; color: white; text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 600;">
+            Set Password
+          </a>
+        </div>
+        <p style="font-size: 12px; color: #9CA3AF; margin-top: 32px; border-top: 1px solid #E2E8F0; padding-top: 16px;">
+          If you didn't expect this email, you can ignore it.
+        </p>
+      </div>
+    `,
+  });
+
+  return { sent: true as const };
+}
+
 export async function sendReportCompletedEmail({
   clientName,
   reportTitle,
