@@ -547,7 +547,60 @@ Higher is better — default green ▲ / red ▼ (current behaviour):
 * Organic Keywords, Referring Domains, Backlinks, Authority Score
 * Traffic Share
 
-Always pair the colour class with the actual direction arrow — never write a green ▼ where the data shows a positive change, never write a red ▲ for 0% change. If the % change is exactly 0 or you don't have comparison data, use .m-change.neutral.${reportTypeInstructions}${documentBlocks.length > 1 ? `
+Always pair the colour class with the actual direction arrow — never write a green ▼ where the data shows a positive change, never write a red ▲ for 0% change. If the % change is exactly 0 or you don't have comparison data, use .m-change.neutral.
+
+BLOCK STRUCTURE — CRITICAL (applies to every report type):
+Every distinct visual section of the report MUST be wrapped in a <section> element with three data attributes:
+
+  <section data-block-id="..." data-block-type="..." data-block-title="...">
+    <!-- original section markup, unchanged -->
+  </section>
+
+These wrappers identify each section so per-report layout customisations (reorder, hide, override) can be applied downstream. Without them every report still renders correctly, but customisations cannot be saved against the report.
+
+Attribute rules:
+* data-block-id — STABLE, unique-within-document identifier. Format: {block-type}-{index} where index starts at 0 and increments per block type. Examples: key-numbers-0, narrative-0, narrative-1, chart-organic-trends-0, data-table-0, data-table-1. Always use the SAME id for the SAME logical section across regenerations of the same report type so saved customisations persist.
+* data-block-type — semantic type, from the enumerated list below. DO NOT invent new types. If a section doesn't fit any canonical type, use "narrative" as the catch-all.
+* data-block-title — short human-readable label (2-4 words) for an editor sidebar. Examples: "Key Numbers", "Top Queries", "Organic Traffic Chart", "Areas to Address". One short string, not a full heading.
+
+Canonical block types — use ONLY these:
+* intro              — opening "At a glance" + section title pairing (top of the report)
+* hero-summary       — large coloured KPI banner with hero KPIs
+* key-numbers-grid   — the .metrics-grid cards at the top of paid-ad reports
+* comparison-grid    — period-over-period comparison cards
+* period-trend-cards — three-period trend cards (e.g. efficiency over 3 months)
+* narrative          — prose paragraphs of analysis (may appear multiple times)
+* chart              — Chart.js canvas sections (e.g. Organic Traffic Performance)
+* data-table         — tabular data (Top Pages, Top Queries, Landing Pages, AI Search Traffic, channel breakdown)
+* insight-callout    — highlighted "Key insight" / "Spotlight" boxes
+* funnel             — funnel visualisation (paid ads)
+* campaigns-table    — campaign breakdown table (paid ads — kept distinct from generic data-table for editor convenience)
+* tasks              — tasks-completed / work-completed list
+* recommendations    — forward-looking action items / "Areas to Address" / "Plan for Next Month"
+
+Default emission order — when nothing else dictates otherwise, emit blocks in this order per report type:
+
+Google Ads / Meta Ads / Microsoft Ads / LinkedIn Ads / Combined:
+  intro → hero-summary → key-numbers-grid → comparison-grid → period-trend-cards →
+  narrative → chart → funnel → campaigns-table → insight-callout → tasks →
+  recommendations
+
+SEO:
+  intro → hero-summary → key-numbers-grid → narrative → data-table (channel) →
+  chart (organic-trends) → data-table (top pages) → data-table (top queries) →
+  data-table (landing pages) → data-table (AI search traffic) → insight-callout →
+  tasks → recommendations
+
+Google Business Profile (GBP):
+  intro → hero-summary → key-numbers-grid → narrative → data-table → insight-callout →
+  recommendations
+
+Structural constraints:
+* Place ONLY <section data-block-id> blocks as direct children of <div class="main">. Free-floating dividers, intro divs, and any other scaffolding must be moved INSIDE a block (typically the most-relevant adjacent block). The block <section> IS the structural container — let its CSS margins / padding provide visual separation between blocks.
+* Do NOT nest one <section data-block-id> inside another. Blocks are siblings.
+* The Chart.js CDN tag in <head> and the bottom-of-body chart-init <script> stay OUTSIDE the blocks, exactly as they are today.
+* The header, .header-accent, and footer stay OUTSIDE <div class="main"> and are NOT wrapped as blocks.
+* Use a fresh integer suffix for each instance of a repeatable block type within one report. Across a report you might have data-table-0, data-table-1, data-table-2 (e.g. for top pages, top queries, landing pages); narrative-0, narrative-1; etc.${reportTypeInstructions}${documentBlocks.length > 1 ? `
 
 NOTE: Multiple report files have been attached. Use data from ALL of them to build a comprehensive report.` : ''}${clientFileBlocks.length > 0 ? `
 
@@ -1141,37 +1194,46 @@ Here is your design template:
 
 <div class="main">
 
-  <!-- PLAIN ENGLISH SUMMARY -->
-  <div style="margin-bottom: 10px;">
-    <div class="section-label">At a glance</div>
-    <div class="section-title">How did February go?</div>
-  </div>
+  <!-- Every top-level section inside .main must be wrapped in a
+       <section data-block-id="..." data-block-type="..." data-block-title="...">
+       per the BLOCK STRUCTURE rules above. -->
 
-  <div class="hero-summary">
-    <p>
-      February was a <strong>strong month</strong> for your Google Ads. Your campaigns generated
-      <strong>$28,762 in revenue</strong> from a spend of just $3,012.
-    </p>
-    <div class="hero-kpis">
-      <div class="hero-kpi">
-        <div class="kpi-label">Total Revenue</div>
-        <div class="kpi-value">$28,762</div>
-        <div class="kpi-sub">From ad-driven sales</div>
-      </div>
-      <div class="hero-kpi">
-        <div class="kpi-label">Ad Spend</div>
-        <div class="kpi-value">$3,012</div>
-        <div class="kpi-sub">Total cost for the month</div>
-      </div>
-      <div class="hero-kpi">
-        <div class="kpi-label">Purchases</div>
-        <div class="kpi-value">297</div>
-        <div class="kpi-sub">Completed transactions</div>
+  <section data-block-id="intro-0" data-block-type="intro" data-block-title="At a glance">
+    <div style="margin-bottom: 10px;">
+      <div class="section-label">At a glance</div>
+      <div class="section-title">How did February go?</div>
+    </div>
+  </section>
+
+  <section data-block-id="hero-summary-0" data-block-type="hero-summary" data-block-title="Hero Summary">
+    <div class="hero-summary">
+      <p>
+        February was a <strong>strong month</strong> for your Google Ads. Your campaigns generated
+        <strong>$28,762 in revenue</strong> from a spend of just $3,012.
+      </p>
+      <div class="hero-kpis">
+        <div class="hero-kpi">
+          <div class="kpi-label">Total Revenue</div>
+          <div class="kpi-value">$28,762</div>
+          <div class="kpi-sub">From ad-driven sales</div>
+        </div>
+        <div class="hero-kpi">
+          <div class="kpi-label">Ad Spend</div>
+          <div class="kpi-value">$3,012</div>
+          <div class="kpi-sub">Total cost for the month</div>
+        </div>
+        <div class="hero-kpi">
+          <div class="kpi-label">Purchases</div>
+          <div class="kpi-value">297</div>
+          <div class="kpi-sub">Completed transactions</div>
+        </div>
       </div>
     </div>
-  </div>
+  </section>
 
-  <!-- (Continue with all other sections using the same design patterns) -->
+  <!-- (Continue with all other sections, each wrapped in its own
+       <section data-block-id=...> per the canonical block types and the
+       default order for this report type.) -->
 
 </div>
 

@@ -1,9 +1,16 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import { applyBlocksToHtml } from '@/lib/reportBlocks';
+import type { BlocksConfig } from '@/lib/types';
 
 interface ReportHtmlProps {
   html: string;
+  // Optional per-report layout customisation. Null/undefined means render
+  // the AI output verbatim. When present, blocks are reordered, hidden,
+  // and override-replaced before the HTML is injected — and before the
+  // script-execution effect runs, so charts still initialise.
+  blocks?: BlocksConfig | null;
   className?: string;
 }
 
@@ -13,7 +20,15 @@ interface ReportHtmlProps {
 // container, replace each inert <script> with a fresh one in document
 // order, and await external src loads before processing any later inline
 // scripts so dependencies (e.g. Chart.js → new Chart(...)) line up.
-export function ReportHtml({ html, className }: ReportHtmlProps) {
+export function ReportHtml({ html, blocks, className }: ReportHtmlProps) {
+  // applyBlocksToHtml is pure string manipulation, so running it inside
+  // useMemo produces the SAME string in SSR and after hydration — no
+  // flash of the un-customised report, no hydration mismatch.
+  const renderedHtml = useMemo(
+    () => applyBlocksToHtml(html ?? '', blocks ?? null),
+    [html, blocks],
+  );
+
   const containerRef = useRef<HTMLDivElement | null>(null);
   // Per-mount guard: prevents double execution under React StrictMode
   // (which intentionally invokes effects twice in dev) and any
@@ -22,9 +37,9 @@ export function ReportHtml({ html, className }: ReportHtmlProps) {
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || !html) return;
-    if (lastExecutedHtml.current === html) return;
-    lastExecutedHtml.current = html;
+    if (!container || !renderedHtml) return;
+    if (lastExecutedHtml.current === renderedHtml) return;
+    lastExecutedHtml.current = renderedHtml;
 
     let cancelled = false;
 
@@ -81,13 +96,13 @@ export function ReportHtml({ html, className }: ReportHtmlProps) {
     return () => {
       cancelled = true;
     };
-  }, [html]);
+  }, [renderedHtml]);
 
   return (
     <div
       ref={containerRef}
       className={className}
-      dangerouslySetInnerHTML={{ __html: html }}
+      dangerouslySetInnerHTML={{ __html: renderedHtml }}
     />
   );
 }

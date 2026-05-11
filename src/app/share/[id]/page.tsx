@@ -39,7 +39,7 @@ export default async function ShareReportPage({
 
   const { data: report } = await supabase
     .from('reports')
-    .select('id, title, ai_enhanced_html, is_published, ai_status')
+    .select('id, title, ai_enhanced_html, blocks, is_published, ai_status')
     .eq('id', id)
     .single();
 
@@ -67,6 +67,7 @@ export default async function ShareReportPage({
       <ReportHtml
         className={styles.reportContainer}
         html={report.ai_enhanced_html}
+        blocks={report.blocks ?? null}
       />
     </div>
   );
