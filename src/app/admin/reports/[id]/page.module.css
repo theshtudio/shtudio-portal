@@ -740,3 +740,22 @@
     transform: translateY(0);
   }
 }
+
+.editLayoutBtn {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-dark);
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.editLayoutBtn:hover {
+  background: var(--color-dark-100);
+  border-color: var(--color-dark-300);
+}

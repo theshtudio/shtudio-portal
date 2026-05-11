@@ -19,13 +19,14 @@
 
 import type { BlocksConfig } from './types';
 
-interface ParsedBlock {
+export interface ParsedBlock {
   id: string;
   type: string;
   title: string | null;
   start: number;
   end: number;
   outerHtml: string;
+  innerHtml: string;
 }
 
 function readAttr(attrs: string, name: string): string | null {
@@ -37,10 +38,19 @@ function readAttr(attrs: string, name: string): string | null {
   return m[1] ?? m[2] ?? null;
 }
 
+function extractInner(outerHtml: string): string {
+  const openMatch = outerHtml.match(/^<section\b[^>]*>/i);
+  const openLen = openMatch ? openMatch[0].length : 0;
+  const closeIdx = outerHtml.lastIndexOf('</section');
+  if (closeIdx < openLen) return '';
+  return outerHtml.slice(openLen, closeIdx);
+}
+
 // Scan for top-level <section ...data-block-id="...">...</section> elements,
 // tracking nesting depth so sections inside sections aren't treated as
-// independent blocks.
-function findTopLevelBlocks(html: string): ParsedBlock[] {
+// independent blocks. Exported so the block editor can render each block
+// individually as a sortable React component.
+export function findTopLevelBlocks(html: string): ParsedBlock[] {
   const blocks: ParsedBlock[] = [];
   const tagRe = /<(\/?)section\b([^>]*)>/gi;
 
@@ -61,13 +71,15 @@ function findTopLevelBlocks(html: string): ParsedBlock[] {
         const end = m.index + m[0].length;
         const id = readAttr(openAttrs, 'data-block-id');
         if (id) {
+          const outerHtml = html.slice(openStart, end);
           blocks.push({
             id,
             type: readAttr(openAttrs, 'data-block-type') ?? 'unknown',
             title: readAttr(openAttrs, 'data-block-title'),
             start: openStart,
             end,
-            outerHtml: html.slice(openStart, end),
+            outerHtml,
+            innerHtml: extractInner(outerHtml),
           });
         }
         openStart = -1;
@@ -86,13 +98,15 @@ function findTopLevelBlocks(html: string): ParsedBlock[] {
         const end = m.index + m[0].length;
         const id = readAttr(openAttrs, 'data-block-id');
         if (id) {
+          const outerHtml = html.slice(openStart, end);
           blocks.push({
             id,
             type: readAttr(openAttrs, 'data-block-type') ?? 'unknown',
             title: readAttr(openAttrs, 'data-block-title'),
             start: openStart,
             end,
-            outerHtml: html.slice(openStart, end),
+            outerHtml,
+            innerHtml: extractInner(outerHtml),
           });
         }
         openStart = -1;
@@ -179,4 +193,25 @@ export function applyBlocksToHtml(
   const after = html.slice(lastEnd);
 
   return before + rendered.join('\n') + after;
+}
+
+// Editor-specific helper: split the HTML into the scaffolding before the
+// first block, the parsed block list, and the scaffolding after the last
+// block. The block editor renders head + sortable list + tail so React
+// controls each block as an independent sortable item while keeping
+// styles, head scripts, and bottom-of-body init scripts in place.
+export interface SplitForEditor {
+  head: string;
+  blocks: ParsedBlock[];
+  tail: string;
+}
+
+export function splitHtmlForEditor(html: string): SplitForEditor {
+  const blocks = findTopLevelBlocks(html);
+  if (blocks.length === 0) {
+    return { head: html, blocks: [], tail: '' };
+  }
+  const head = html.slice(0, blocks[0].start);
+  const tail = html.slice(blocks[blocks.length - 1].end);
+  return { head, blocks, tail };
 }

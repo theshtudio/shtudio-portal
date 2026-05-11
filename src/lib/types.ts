@@ -71,6 +71,7 @@ export interface Report {
   published_at: string | null;
   created_by: string | null;
   blocks: BlocksConfig | null;
+  blocks_draft: BlocksConfig | null;
   created_at: string;
   updated_at: string;
 }
