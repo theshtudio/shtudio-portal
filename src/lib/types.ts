@@ -1,6 +1,18 @@
 export type UserRole = 'admin' | 'client';
 export type ReportAiStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
+export interface BlocksOverride {
+  html: string;
+}
+
+// Per-report layout customisation. Populated from reports.blocks (JSONB,
+// nullable). Null means "render AI output in document order, no overrides".
+export interface BlocksConfig {
+  order?: string[];
+  hidden?: string[];
+  overrides?: Record<string, BlocksOverride>;
+}
+
 export interface Profile {
   id: string;
   email: string;
@@ -58,6 +70,7 @@ export interface Report {
   is_published: boolean;
   published_at: string | null;
   created_by: string | null;
+  blocks: BlocksConfig | null;
   created_at: string;
   updated_at: string;
 }

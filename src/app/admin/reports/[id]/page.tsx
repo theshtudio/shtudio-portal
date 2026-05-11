@@ -16,10 +16,16 @@ import styles from './page.module.css';
 
 export default async function ReportDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
+  const sp = await searchParams;
+  // ?raw=1 bypasses any saved block customisations so admins can see the
+  // unmodified AI output for debugging. Default is the customised view.
+  const rawMode = sp.raw === '1';
   const supabase = await createServerSupabase();
 
   const { data: report } = await supabase
@@ -149,6 +155,7 @@ export default async function ReportDetailPage({
           <ReportHtml
             className={styles.htmlPreview}
             html={report.ai_enhanced_html}
+            blocks={rawMode ? null : (report.blocks ?? null)}
           />
         ) : report.ai_status === 'processing' ? (
           <ProcessingProgress reportId={report.id} />
