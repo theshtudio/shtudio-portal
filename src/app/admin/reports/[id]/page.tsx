@@ -26,6 +26,10 @@ export default async function ReportDetailPage({
   // ?raw=1 bypasses any saved block customisations so admins can see the
   // unmodified AI output for debugging. Default is the customised view.
   const rawMode = sp.raw === '1';
+  // ?preview=published forces the published block config (what clients see)
+  // even when there's an unpublished draft saved. Useful for verifying the
+  // "live" state without leaving the admin context.
+  const previewPublished = sp.preview === 'published';
   const supabase = await createServerSupabase();
 
   const { data: report } = await supabase
@@ -78,6 +82,11 @@ export default async function ReportDetailPage({
         </div>
         <div className={styles.headerActions}>
           <StatusBadge status={report.ai_status as any} />
+          {report.ai_status === 'completed' && report.ai_enhanced_html && (
+            <Link href={`/admin/reports/${report.id}/edit`} className={styles.editLayoutBtn}>
+              Edit Layout
+            </Link>
+          )}
           <ReportActions report={report} clientId={client?.id} showDelete />
         </div>
       </div>
@@ -155,7 +164,13 @@ export default async function ReportDetailPage({
           <ReportHtml
             className={styles.htmlPreview}
             html={report.ai_enhanced_html}
-            blocks={rawMode ? null : (report.blocks ?? null)}
+            blocks={
+              rawMode
+                ? null
+                : previewPublished
+                  ? (report.blocks ?? null)
+                  : (report.blocks_draft ?? report.blocks ?? null)
+            }
           />
         ) : report.ai_status === 'processing' ? (
           <ProcessingProgress reportId={report.id} />
