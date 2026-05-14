@@ -11,6 +11,11 @@ interface ReportHtmlProps {
   // and override-replaced before the HTML is injected — and before the
   // script-execution effect runs, so charts still initialise.
   blocks?: BlocksConfig | null;
+  // When false, blocks marked with data-default-hidden="true" are
+  // rendered (admin preview default). When true or undefined (the client
+  // default), default-hidden blocks are stripped from the output unless
+  // the admin has explicitly opted them in via blocks.shown.
+  respectDefaultHidden?: boolean;
   className?: string;
 }
 
@@ -20,13 +25,21 @@ interface ReportHtmlProps {
 // container, replace each inert <script> with a fresh one in document
 // order, and await external src loads before processing any later inline
 // scripts so dependencies (e.g. Chart.js → new Chart(...)) line up.
-export function ReportHtml({ html, blocks, className }: ReportHtmlProps) {
+export function ReportHtml({
+  html,
+  blocks,
+  respectDefaultHidden,
+  className,
+}: ReportHtmlProps) {
   // applyBlocksToHtml is pure string manipulation, so running it inside
   // useMemo produces the SAME string in SSR and after hydration — no
   // flash of the un-customised report, no hydration mismatch.
   const renderedHtml = useMemo(
-    () => applyBlocksToHtml(html ?? '', blocks ?? null),
-    [html, blocks],
+    () =>
+      applyBlocksToHtml(html ?? '', blocks ?? null, {
+        respectDefaultHidden: respectDefaultHidden ?? true,
+      }),
+    [html, blocks, respectDefaultHidden],
   );
 
   const containerRef = useRef<HTMLDivElement | null>(null);

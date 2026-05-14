@@ -557,13 +557,24 @@ Extract the comparison period from the source PDF. Where to look:
 * Google Ads UI exports show it as a "Compare to" period directly below the main date range at the top of the export.
 * Search Console / SEMrush exports often note the comparison under each chart or in the table caption.
 
-Surface the comparison period as a small note immediately below the section heading of every section that contains delta badges. Use the exact element:
+WHICH BLOCKS REQUIRE THE NOTE — every block displaying period-over-period numbers must have a <p class="comparison-note"> directly under its heading, not only the primary comparison-cards block. This explicitly includes:
+* comparison-grid (period-over-period comparison cards)
+* period-trend-cards (multi-period trend cards, e.g. 3-month efficiency)
+* key-numbers-grid — but only when its cards show ▲/▼ deltas. A pure totals grid with no deltas does NOT need a note.
+* Any narrative block that references "vs. previous period", "vs. last month", or similar
+* Any chart block that overlays current vs. previous period data
+
+Use the exact element:
 
    <p class="comparison-note">vs. previous period (1–31 Mar 2026)</p>
 
-One note per section, not per card. If the same comparison period applies to every section of the report (most common case), you may write a single note at the top of the FIRST comparison section instead — but the wording in that case must explicitly state:
+One note per section, not per card.
+
+SHARED-NOTE SHORTCUT — if the SAME comparison period applies to EVERY block in the report that shows deltas, you may write a single note at the top of the first comparison section instead, with explicit wording:
 
    <p class="comparison-note">All period-over-period changes in this report compare to the previous period (1–31 Mar 2026).</p>
+
+The shared-note shortcut does NOT cover mixed baselines. If two different sections use different comparison periods (e.g. month-over-month in the headline cards but year-over-year in the Trends section), each section MUST get its own note — the shared note doesn't cover them. When in doubt, add per-section notes rather than relying on the shortcut.
 
 Never omit this note. If the source PDF doesn't clearly state the comparison period, write:
 
@@ -585,6 +596,36 @@ If no recommendations are present in the source content, the Recommendations / N
   (b) contain ONLY data-driven observations framed as observations, not prescriptions — e.g. "Conversion rate dropped 22% this period, which warrants attention" rather than "We recommend optimising landing pages".
 
 The line is between "here is what the data shows" (observation, allowed) and "here is what we propose to do about it" (recommendation, agency-only). If the agency hasn't proposed an action, the report must not propose one either.
+
+INTERNAL CONTENT — HIDE FROM CLIENTS — CRITICAL:
+Source content sometimes contains paragraphs, sections, or notes explicitly marked as INTERNAL — meant for the agency team, not the client. Watch for these markers:
+* "Internal Reference Only"
+* "Internal use"
+* "Team notes" / "Agency notes"
+* "For internal review"
+* "Not for client"
+* "Internal commentary"
+* Any equivalent phrasing that signals "this is for us, not them"
+
+Internal content MUST be isolated into its own block — never inlined into a narrative block, callout, recommendations section, or any other client-facing block type. The model emits internal content as a dedicated section of block type "internal-note" with the data-default-hidden attribute set so the renderer can strip it from client views automatically.
+
+Required structure:
+
+   <section data-block-id="internal-note-0" data-block-type="internal-note" data-block-title="Internal Notes" data-default-hidden="true">
+     <div class="internal-note-block">
+       <h3>Internal Reference — Hidden from Client</h3>
+       <p>[content from source PDF, preserved as written]</p>
+     </div>
+   </section>
+
+Attribute requirements:
+* data-default-hidden="true" — non-negotiable. This is how the renderer knows to strip the block from /share and /dashboard. Without it, the content leaks to clients.
+* The block's INNER heading should always include the literal text "Internal Reference — Hidden from Client" so admins viewing the editor / admin preview know what they're looking at without needing to inspect attributes.
+* The data-block-title attribute is "Internal Notes" (or a more specific short label if the source distinguishes between multiple internal sections).
+
+Use a fresh integer suffix for each internal block (internal-note-0, internal-note-1, …) the same way as any other repeatable block type.
+
+If a single source paragraph mixes client-facing and internal content (e.g. a recommendations section that has a "internal-only follow-up" line at the end), split it: keep the client-facing portion in its original block, and move the internal portion into a separate internal-note block. Do not paraphrase internal content out of existence — preserve it for the admin team.
 
 BLOCK STRUCTURE — CRITICAL (applies to every report type):
 Every distinct visual section of the report MUST be wrapped in a <section> element with three data attributes:
@@ -614,6 +655,7 @@ Canonical block types — use ONLY these:
 * campaigns-table    — campaign breakdown table (paid ads — kept distinct from generic data-table for editor convenience)
 * tasks              — tasks-completed / work-completed list
 * recommendations    — forward-looking action items / "Areas to Address" / "Plan for Next Month"
+* internal-note      — agency-only commentary marked Internal in the source. MUST also carry data-default-hidden="true" so client views strip it automatically. See INTERNAL CONTENT rule above.
 
 Default emission order — when nothing else dictates otherwise, emit blocks in this order per report type:
 
@@ -938,6 +980,21 @@ Here is your design template:
     color: var(--mid);
     margin: -8px 0 16px 0;
     font-style: italic;
+  }
+
+  .internal-note-block {
+    background: #FFF8E1;
+    border-left: 4px solid #F26522;
+    padding: 16px 20px;
+    border-radius: 4px;
+    margin: 16px 0;
+  }
+  .internal-note-block h3 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #B8860B;
+    margin: 0 0 8px 0;
   }
 
   /* -- CHART FALLBACKS -- */
