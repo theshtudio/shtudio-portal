@@ -549,6 +549,43 @@ Higher is better — default green ▲ / red ▼ (current behaviour):
 
 Always pair the colour class with the actual direction arrow — never write a green ▼ where the data shows a positive change, never write a red ▲ for 0% change. If the % change is exactly 0 or you don't have comparison data, use .m-change.neutral.
 
+COMPARISON PERIOD LABELLING — CRITICAL:
+Every delta badge (▲/▼ with a percentage) implicitly references a comparison baseline. The reader must always know what that baseline is — "▲ 8.40%" vs. previous month, vs. same month last year, and vs. previous 30 days tell completely different stories.
+
+Extract the comparison period from the source PDF. Where to look:
+* Looker Studio exports usually show the comparison range in the page header next to the primary date range.
+* Google Ads UI exports show it as a "Compare to" period directly below the main date range at the top of the export.
+* Search Console / SEMrush exports often note the comparison under each chart or in the table caption.
+
+Surface the comparison period as a small note immediately below the section heading of every section that contains delta badges. Use the exact element:
+
+   <p class="comparison-note">vs. previous period (1–31 Mar 2026)</p>
+
+One note per section, not per card. If the same comparison period applies to every section of the report (most common case), you may write a single note at the top of the FIRST comparison section instead — but the wording in that case must explicitly state:
+
+   <p class="comparison-note">All period-over-period changes in this report compare to the previous period (1–31 Mar 2026).</p>
+
+Never omit this note. If the source PDF doesn't clearly state the comparison period, write:
+
+   <p class="comparison-note">Comparison period not specified in source data.</p>
+
+Surfacing the missing baseline is better than hiding it — the client (and the agency) need to know whenever the comparison isn't grounded.
+
+RECOMMENDATIONS — DO NOT INVENT:
+Recommendations carry agency authority; observations and analysis don't. Never blur that line.
+
+If the source content (PDF, admin notes, client files) contains explicit recommendations, action items, "next steps", or "plan for next month", these are authored by the agency for the client and must be treated as inviolable:
+* Reproduce them with their original meaning and intent fully preserved.
+* You MAY lightly adjust wording for grammar, consistency of tone with the rest of the report, and clarity — but NEVER alter the substance, scope, or specific actions recommended.
+* You MAY NOT add additional recommendations of your own, even if the data analysis suggests obvious next steps. The agency decides what to recommend; the report just renders it well.
+* You MAY add brief context, rationale, or expected outcomes around each agency-authored recommendation (e.g. "This action is expected to address the conversion rate decline observed in this period"). Frame these as explanations and supporting context, not as new recommendations.
+
+If no recommendations are present in the source content, the Recommendations / Next Steps / Plan for Next Month section must either:
+  (a) be omitted from the report entirely, or
+  (b) contain ONLY data-driven observations framed as observations, not prescriptions — e.g. "Conversion rate dropped 22% this period, which warrants attention" rather than "We recommend optimising landing pages".
+
+The line is between "here is what the data shows" (observation, allowed) and "here is what we propose to do about it" (recommendation, agency-only). If the agency hasn't proposed an action, the report must not propose one either.
+
 BLOCK STRUCTURE — CRITICAL (applies to every report type):
 Every distinct visual section of the report MUST be wrapped in a <section> element with three data attributes:
 
@@ -895,6 +932,13 @@ Here is your design template:
   .m-change.good-down { background: #DCFCE7; color: var(--green); }
   .m-change.bad-up { background: #FEE2E2; color: var(--red); }
   .m-change.neutral { background: #F1F5F9; color: var(--mid); }
+
+  .comparison-note {
+    font-size: 13px;
+    color: var(--mid);
+    margin: -8px 0 16px 0;
+    font-style: italic;
+  }
 
   /* -- CHART FALLBACKS -- */
   .chart-container:empty { display: none; }
