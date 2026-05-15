@@ -563,6 +563,7 @@ WHICH BLOCKS REQUIRE THE NOTE — every block displaying period-over-period numb
 * key-numbers-grid — but only when its cards show ▲/▼ deltas. A pure totals grid with no deltas does NOT need a note.
 * Any narrative block that references "vs. previous period", "vs. last month", or similar
 * Any chart block that overlays current vs. previous period data
+* Any sub-section of a multi-region or multi-campaign report — e.g. AU breakdown, NZ breakdown, per-campaign cards, per-region trend tables. Each visually-separated sub-section is its OWN block from the reader's perspective and gets its OWN note, even when the parent overview block already has one.
 
 Use the exact element:
 
@@ -570,17 +571,28 @@ Use the exact element:
 
 One note per section, not per card.
 
-SHARED-NOTE SHORTCUT — if the SAME comparison period applies to EVERY block in the report that shows deltas, you may write a single note at the top of the first comparison section instead, with explicit wording:
+PER-BLOCK ONLY — NO SHARED-NOTE SHORTCUT. Every block listed above gets its OWN <p class="comparison-note"> directly under its heading. There is no "single note at the top covers the whole report" exception. If the same comparison period applies to every block (the common case), all the notes will say the same thing — that's intentional. Repetition is better than ambiguity, because visually-separated sections (AU vs NZ vs combined ANZ; campaign A vs campaign B; week 1 vs week 2) read as standalone sections and the reader needs the baseline restated next to each card grid.
 
-   <p class="comparison-note">All period-over-period changes in this report compare to the previous period (1–31 Mar 2026).</p>
+INFERENCE FALLBACK when the source doesn't explicitly state the comparison period — never write a delta without a baseline. Apply this in order:
 
-The shared-note shortcut does NOT cover mixed baselines. If two different sections use different comparison periods (e.g. month-over-month in the headline cards but year-over-year in the Trends section), each section MUST get its own note — the shared note doesn't cover them. When in doubt, add per-section notes rather than relying on the shortcut.
+1. Try to extract the comparison period from the source PDF first (header date range, "Compare to" line, chart caption — see WHERE TO LOOK above).
 
-Never omit this note. If the source PDF doesn't clearly state the comparison period, write:
+2. If extraction fails, INFER the most likely period from the report's primary date range:
+   * Single calendar month (e.g. "April 2026") → comparison is the immediately preceding month (March 2026). This is the default in Google Ads, Looker Studio, Meta Ads, etc.
+   * Single quarter → preceding quarter
+   * Single week → preceding week
+   * Custom date range of N days → preceding N days
+   State the inferred period with an "estimated" marker so the reader knows it's inferred:
 
-   <p class="comparison-note">Comparison period not specified in source data.</p>
+      <p class="comparison-note">vs. previous month (estimated: 1–31 Mar 2026)</p>
 
-Surfacing the missing baseline is better than hiding it — the client (and the agency) need to know whenever the comparison isn't grounded.
+   The literal word "estimated" inside the parens is the signal — it tells the reader (and the agency reviewer) that this baseline was inferred from context, not extracted from the source.
+
+3. ONLY when even reasonable inference is impossible — e.g. the source spans an unusual custom range with no obvious "previous period" equivalent, or the primary date range itself isn't clear — fall back to:
+
+      <p class="comparison-note">Comparison period not specified in source data.</p>
+
+The goal: a client never reads a delta without knowing what it's compared to. An estimated baseline is much better than no baseline.
 
 RECOMMENDATIONS — DO NOT INVENT:
 Recommendations carry agency authority; observations and analysis don't. Never blur that line.
