@@ -33,6 +33,10 @@ function isValidBlocksConfig(value: unknown): value is BlocksConfig {
     if (!Array.isArray(v.hidden)) return false;
     if (!v.hidden.every((id) => typeof id === 'string')) return false;
   }
+  if (v.shown !== undefined) {
+    if (!Array.isArray(v.shown)) return false;
+    if (!v.shown.every((id) => typeof id === 'string')) return false;
+  }
   if (v.overrides !== undefined) {
     if (typeof v.overrides !== 'object' || v.overrides === null) return false;
     for (const [key, override] of Object.entries(v.overrides)) {

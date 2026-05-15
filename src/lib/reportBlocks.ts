@@ -23,6 +23,11 @@ export interface ParsedBlock {
   id: string;
   type: string;
   title: string | null;
+  // True when the source markup carries data-default-hidden="true".
+  // The renderer treats these as hidden by default in client views and the
+  // editor displays them with the same fade as user-hidden blocks. Admins
+  // can opt-in for clients by adding the id to blocks.shown.
+  dataDefaultHidden: boolean;
   start: number;
   end: number;
   outerHtml: string;
@@ -76,6 +81,8 @@ export function findTopLevelBlocks(html: string): ParsedBlock[] {
             id,
             type: readAttr(openAttrs, 'data-block-type') ?? 'unknown',
             title: readAttr(openAttrs, 'data-block-title'),
+            dataDefaultHidden:
+              (readAttr(openAttrs, 'data-default-hidden') ?? '').toLowerCase() === 'true',
             start: openStart,
             end,
             outerHtml,
@@ -103,6 +110,8 @@ export function findTopLevelBlocks(html: string): ParsedBlock[] {
             id,
             type: readAttr(openAttrs, 'data-block-type') ?? 'unknown',
             title: readAttr(openAttrs, 'data-block-title'),
+            dataDefaultHidden:
+              (readAttr(openAttrs, 'data-default-hidden') ?? '').toLowerCase() === 'true',
             start: openStart,
             end,
             outerHtml,
@@ -124,16 +133,33 @@ function isConfigEmpty(blocks: BlocksConfig | null | undefined): boolean {
   if (!blocks) return true;
   const orderLen = blocks.order?.length ?? 0;
   const hiddenLen = blocks.hidden?.length ?? 0;
+  const shownLen = blocks.shown?.length ?? 0;
   const overrideCount = blocks.overrides ? Object.keys(blocks.overrides).length : 0;
-  return orderLen === 0 && hiddenLen === 0 && overrideCount === 0;
+  return (
+    orderLen === 0 && hiddenLen === 0 && shownLen === 0 && overrideCount === 0
+  );
+}
+
+export interface ApplyBlocksOptions {
+  // When true (default — client views), blocks with data-default-hidden="true"
+  // are stripped from the output unless the admin has explicitly opted them
+  // in via blocks.shown. When false (admin preview / raw mode), the
+  // default-hidden behavior is bypassed and these blocks always render.
+  respectDefaultHidden?: boolean;
 }
 
 export function applyBlocksToHtml(
   html: string,
   blocks: BlocksConfig | null | undefined,
+  options?: ApplyBlocksOptions,
 ): string {
-  if (isConfigEmpty(blocks)) return html;
-  const cfg = blocks as BlocksConfig;
+  const respectDefaultHidden = options?.respectDefaultHidden ?? true;
+  const configEmpty = isConfigEmpty(blocks);
+
+  // Short-circuit: only safe when there's no work to do AND we don't need to
+  // strip default-hidden blocks (admin context). Client views must run the
+  // parser so default-hidden blocks are stripped even with no saved config.
+  if (configEmpty && !respectDefaultHidden) return html;
 
   const found = findTopLevelBlocks(html);
   if (found.length === 0) {
@@ -142,7 +168,14 @@ export function applyBlocksToHtml(
     return html;
   }
 
+  // Fast path when there's nothing to filter or rearrange.
+  if (configEmpty && respectDefaultHidden && !found.some((b) => b.dataDefaultHidden)) {
+    return html;
+  }
+
+  const cfg = (blocks ?? {}) as BlocksConfig;
   const hidden = new Set(cfg.hidden ?? []);
+  const shown = new Set(cfg.shown ?? []);
   const overrides = cfg.overrides ?? {};
   const explicitOrder = cfg.order ?? [];
 
@@ -172,6 +205,10 @@ export function applyBlocksToHtml(
     if (hidden.has(id)) continue;
     const block = byId.get(id);
     if (!block) continue;
+    // Default-hidden blocks (e.g. internal notes) are stripped unless the
+    // admin has explicitly opted them in via blocks.shown, or the caller
+    // opted out of default-hidden filtering (admin preview / raw mode).
+    if (respectDefaultHidden && block.dataDefaultHidden && !shown.has(id)) continue;
     const override = overrides[id];
     if (override && typeof override.html === 'string') {
       // Preserve the opening <section ...> tag (with its data attributes)

@@ -78,6 +78,7 @@ export function BlockEditor({
 
   const [order, setOrder] = useState<string[]>(() => buildOrder(allIds, initialDraft?.order));
   const [hidden, setHidden] = useState<Set<string>>(() => new Set(initialDraft?.hidden ?? []));
+  const [shown, setShown] = useState<Set<string>>(() => new Set(initialDraft?.shown ?? []));
   const [overrides, setOverrides] = useState<Record<string, { html: string }>>(
     () => initialDraft?.overrides ?? {},
   );
@@ -101,9 +102,10 @@ export function BlockEditor({
     () => ({
       order,
       hidden: Array.from(hidden),
+      shown: Array.from(shown),
       overrides,
     }),
-    [order, hidden, overrides],
+    [order, hidden, shown, overrides],
   );
 
   // Debounced save. Skip the first effect run so we don't immediately
@@ -206,14 +208,55 @@ export function BlockEditor({
     });
   }, []);
 
-  const toggleHide = useCallback((blockId: string) => {
-    setHidden((prev) => {
-      const next = new Set(prev);
-      if (next.has(blockId)) next.delete(blockId);
-      else next.add(blockId);
-      return next;
-    });
-  }, []);
+  // Compute whether a block is "effectively hidden" from the client's
+  // perspective: it's hidden if explicitly in `hidden`, OR if it carries
+  // data-default-hidden="true" and hasn't been opted-in via `shown`.
+  const isEffectivelyHidden = useCallback(
+    (blockId: string) => {
+      if (hidden.has(blockId)) return true;
+      const block = byId.get(blockId);
+      if (block?.dataDefaultHidden && !shown.has(blockId)) return true;
+      return false;
+    },
+    [hidden, shown, byId],
+  );
+
+  const toggleHide = useCallback(
+    (blockId: string) => {
+      const block = byId.get(blockId);
+      const isDefaultHidden = block?.dataDefaultHidden ?? false;
+      const wasEffectivelyHidden = isEffectivelyHidden(blockId);
+
+      if (wasEffectivelyHidden) {
+        // Admin clicked "show": un-hide explicitly + opt in if default-hidden.
+        setHidden((prev) => {
+          if (!prev.has(blockId)) return prev;
+          const next = new Set(prev);
+          next.delete(blockId);
+          return next;
+        });
+        if (isDefaultHidden) {
+          setShown((prev) => {
+            if (prev.has(blockId)) return prev;
+            const next = new Set(prev);
+            next.add(blockId);
+            return next;
+          });
+        }
+      } else {
+        // Admin clicked "hide": add to explicit hidden. `hidden` always wins
+        // over `shown`, so default-hidden blocks toggled this way stay
+        // hidden until the admin clicks the eye again.
+        setHidden((prev) => {
+          if (prev.has(blockId)) return prev;
+          const next = new Set(prev);
+          next.add(blockId);
+          return next;
+        });
+      }
+    },
+    [byId, isEffectivelyHidden],
+  );
 
   const handleSaveOverride = useCallback((blockId: string, cleanHtml: string) => {
     setOverrides((prev) => ({ ...prev, [blockId]: { html: cleanHtml } }));
@@ -262,6 +305,7 @@ export function BlockEditor({
       // Reset local state to "no customisation" and reload the editor.
       setOrder(allIds);
       setHidden(new Set());
+      setShown(new Set());
       setOverrides({});
       setHasDraftChanges(false);
       setSaveStatus('idle');
@@ -361,7 +405,7 @@ export function BlockEditor({
                 <SortableBlock
                   key={block.id}
                   block={block}
-                  isHidden={hidden.has(block.id)}
+                  isHidden={isEffectivelyHidden(block.id)}
                   overrideHtml={overrides[block.id]?.html ?? null}
                   onToggleHide={toggleHide}
                   onRequestEdit={(blockId) => setEditingBlockId(blockId)}

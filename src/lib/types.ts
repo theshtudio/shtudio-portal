@@ -7,9 +7,15 @@ export interface BlocksOverride {
 
 // Per-report layout customisation. Populated from reports.blocks (JSONB,
 // nullable). Null means "render AI output in document order, no overrides".
+//
+// `shown` is the opt-in marker for blocks emitted with
+// data-default-hidden="true" (e.g. internal-only notes). Without an entry
+// in `shown`, default-hidden blocks are stripped from client views; with
+// one, they render through. `hidden` always wins over `shown`.
 export interface BlocksConfig {
   order?: string[];
   hidden?: string[];
+  shown?: string[];
   overrides?: Record<string, BlocksOverride>;
 }
 

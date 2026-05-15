@@ -171,6 +171,11 @@ export default async function ReportDetailPage({
                   ? (report.blocks ?? null)
                   : (report.blocks_draft ?? report.blocks ?? null)
             }
+            // Default admin preview shows internal-only blocks so admins
+            // can see what's there. ?preview=published acts like a client
+            // view, ?raw=1 shows everything (effectively the same as not
+            // respecting default-hidden — both intend "show me everything").
+            respectDefaultHidden={previewPublished}
           />
         ) : report.ai_status === 'processing' ? (
           <ProcessingProgress reportId={report.id} />
