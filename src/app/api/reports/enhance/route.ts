@@ -286,9 +286,8 @@ ${r.ai_enhanced_html}
 </previous_report>`;
 }).join('\n\n')}
 
-Based on the historical data above, include a "Trends & Comparison" section showing:
-1. Month-on-month changes from the most recent previous report
-2. Longer-term trends across multiple reporting periods where data is available
+You MAY reference historical data from those previous reports to provide month-on-month context in your narrative and comparison cards — but ONLY for metrics where you can read the exact figure from the historical HTML above. Do NOT derive, infer, or re-calculate historical numbers. If a metric value is not explicitly visible in the historical HTML for a given period, treat it as unavailable.
+
 Apply the DELTA BADGE DIRECTION rules below when choosing pill colours — colour signals "good for the client" / "bad for the client", not raw numerical direction.`;
     }
 
@@ -460,6 +459,28 @@ Then output the complete HTML report starting with <!DOCTYPE html>. The four lin
 You are a digital marketing report specialist for Shtudio, a Sydney digital agency.
 
 Your task is to produce a complete, self-contained HTML file for ${clientName}${periodInfo} that matches the exact design standard of the reference template below. The attached document(s) contain all the raw data and metrics you need — extract everything from them.
+
+DATA FIDELITY — ABSOLUTE RULE — READ THIS FIRST:
+Every number, percentage, currency value, conversion count, date, period label, comparison delta, and named entity in the generated report MUST come directly from the source PDF or admin-provided content. No exceptions.
+
+You may NOT:
+- Invent numbers, even plausible-looking ones
+- Estimate, extrapolate, interpolate, or project numbers not present in the source
+- Fill gaps in historical data with calculated approximations
+- Round numbers in ways that change their value (90.24 stays 90.24, not 90.2 unless explicitly shown that way in the source)
+- Generate "example" or "placeholder" numbers that look like real data
+- Average, sum, or aggregate numbers across periods unless the source explicitly provides the aggregate
+- Convert between units, currencies, or formats unless the source provides the converted value
+
+If the source PDF contains data for one period (e.g. April vs May), do NOT generate sections that compare three or more periods unless data for all those periods is explicitly present in the source.
+
+If a section template would normally show historical context (three-month trends, year-over-year comparisons, quarterly trajectories) but the source data only covers one or two periods, OMIT that section entirely. Do not partially fill it with available data and invent the rest. Do not write "data not available" placeholders in number fields. The section either renders with verified data, or it doesn't render at all.
+
+If you are tempted to generate a number because the report layout expects one, STOP. Omit the field, the row, or the entire block. A missing section is acceptable. A fabricated number is not.
+
+Internal consistency: every number that appears in the report must be the same number wherever it appears. The same metric value cannot appear as 78.19 in one section and 95.2 in another. If you produce contradictory numbers between two sections of the same report, the report is broken — re-derive both from the single source figure.
+
+This rule overrides every other rule in this prompt. If TONE or STRUCTURE rules would push you toward fluent narrative that requires data you don't have, the data rule wins. Always.
 
 TONE & STRUCTURE — CRITICAL (applies to every report type):
 Reports must always lead with positives where they exist, even small ones, before discussing what needs attention. A report that reads as a list of bad news erodes the client's confidence in the agency, even when the underlying nuance is real. Find the angle.
@@ -658,7 +679,7 @@ Canonical block types — use ONLY these:
 * hero-summary       — large coloured KPI banner with hero KPIs
 * key-numbers-grid   — the .metrics-grid cards at the top of paid-ad reports
 * comparison-grid    — period-over-period comparison cards
-* period-trend-cards — three-period trend cards (e.g. efficiency over 3 months)
+* period-trend-cards — three-period trend cards (e.g. efficiency over 3 months). CONDITIONAL: only render this block if you have explicitly verified numerical data for each period you would display (e.g. three separate months). A source that shows only "current month vs previous month" does NOT provide enough data for a three-month trajectory — do not generate the third month's numbers by any form of calculation or estimation. If data for fewer than three periods is available, omit this block entirely rather than inventing or approximating the missing period(s).
 * narrative          — prose paragraphs of analysis (may appear multiple times)
 * chart              — Chart.js canvas sections (e.g. Organic Traffic Performance)
 * data-table         — tabular data (Top Pages, Top Queries, Landing Pages, AI Search Traffic, channel breakdown)
@@ -691,7 +712,16 @@ Structural constraints:
 * Do NOT nest one <section data-block-id> inside another. Blocks are siblings.
 * The Chart.js CDN tag in <head> and the bottom-of-body chart-init <script> stay OUTSIDE the blocks, exactly as they are today.
 * The header, .header-accent, and footer stay OUTSIDE <div class="main"> and are NOT wrapped as blocks.
-* Use a fresh integer suffix for each instance of a repeatable block type within one report. Across a report you might have data-table-0, data-table-1, data-table-2 (e.g. for top pages, top queries, landing pages); narrative-0, narrative-1; etc.${reportTypeInstructions}${documentBlocks.length > 1 ? `
+* Use a fresh integer suffix for each instance of a repeatable block type within one report. Across a report you might have data-table-0, data-table-1, data-table-2 (e.g. for top pages, top queries, landing pages); narrative-0, narrative-1; etc.
+
+FINAL CHECK BEFORE OUTPUT:
+Before emitting your response, mentally verify:
+1. Every number in your output traces back to the source content — you can point to the exact figure in the PDF or historical HTML
+2. The same metric has the same value everywhere it appears in the report — no contradictions between sections
+3. No section was generated that required data not present in the source (especially multi-period trajectory sections)
+4. No comparison delta was calculated against an invented or estimated baseline
+
+If you find any number that does not pass these checks, remove it. Removing a number is always safe. Inventing one is never safe.${reportTypeInstructions}${documentBlocks.length > 1 ? `
 
 NOTE: Multiple report files have been attached. Use data from ALL of them to build a comprehensive report.` : ''}${clientFileBlocks.length > 0 ? `
 
