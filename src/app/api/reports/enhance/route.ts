@@ -6,8 +6,7 @@ import { sendReportCompletedEmail } from '@/lib/email';
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import mammoth from 'mammoth';
-import * as pdfParseModule from 'pdf-parse';
-const pdfParse = (pdfParseModule as any).default ?? pdfParseModule;
+import { extractText, getDocumentProxy } from 'unpdf';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -124,8 +123,9 @@ function isNumberInSource(value: number, sourceNumbers: Set<string>): boolean {
 // Extract text from a PDF buffer. Returns empty string on failure (non-fatal).
 async function extractPdfText(buffer: Buffer): Promise<string> {
   try {
-    const result = await pdfParse(buffer);
-    return result.text || '';
+    const pdf = await getDocumentProxy(new Uint8Array(buffer));
+    const { text } = await extractText(pdf, { mergePages: true });
+    return text || '';
   } catch {
     return '';
   }
