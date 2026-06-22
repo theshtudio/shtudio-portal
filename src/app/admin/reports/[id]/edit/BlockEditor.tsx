@@ -27,6 +27,7 @@ interface BlockEditorProps {
   initialDraft: BlocksConfig | null;
   initialPublished: BlocksConfig | null;
   hasUnpublishedChanges: boolean;
+  unmatchedNumbers?: string[];
 }
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
@@ -62,6 +63,7 @@ export function BlockEditor({
   initialDraft,
   initialPublished,
   hasUnpublishedChanges,
+  unmatchedNumbers = [],
 }: BlockEditorProps) {
   const router = useRouter();
   const { head, blocks: parsedBlocks, tail } = useMemo(
@@ -75,6 +77,22 @@ export function BlockEditor({
     for (const b of parsedBlocks) m.set(b.id, b);
     return m;
   }, [parsedBlocks]);
+
+  // Compute which block IDs contain unmatched numbers for warning highlighting.
+  const blocksWithWarnings = useMemo(() => {
+    if (unmatchedNumbers.length === 0) return new Set<string>();
+    const warned = new Set<string>();
+    for (const block of parsedBlocks) {
+      const blockText = block.innerHtml.replace(/<[^>]+>/g, ' ');
+      for (const n of unmatchedNumbers) {
+        if (blockText.includes(n)) {
+          warned.add(block.id);
+          break;
+        }
+      }
+    }
+    return warned;
+  }, [parsedBlocks, unmatchedNumbers]);
 
   const [order, setOrder] = useState<string[]>(() => buildOrder(allIds, initialDraft?.order));
   const [hidden, setHidden] = useState<Set<string>>(() => new Set(initialDraft?.hidden ?? []));
@@ -393,6 +411,21 @@ export function BlockEditor({
 
       {saveError && <div className={styles.notice}>{saveError}</div>}
 
+      {blocksWithWarnings.size > 0 && (
+        <div style={{
+          background: '#FFFBEB',
+          border: '1px solid #F59E0B',
+          borderLeft: '4px solid #F59E0B',
+          borderRadius: '6px',
+          padding: '10px 16px',
+          margin: '0 0 12px 0',
+          fontSize: '13px',
+          color: '#92400E',
+        }}>
+          ⚠️ <strong>{blocksWithWarnings.size} block{blocksWithWarnings.size > 1 ? 's' : ''}</strong> contain numbers that could not be verified against the source PDF. Highlighted below.
+        </div>
+      )}
+
       <div ref={containerRef} className={styles.frame}>
         <div dangerouslySetInnerHTML={{ __html: head }} />
 
@@ -407,6 +440,7 @@ export function BlockEditor({
                   block={block}
                   isHidden={isEffectivelyHidden(block.id)}
                   overrideHtml={overrides[block.id]?.html ?? null}
+                  hasWarning={blocksWithWarnings.has(block.id)}
                   onToggleHide={toggleHide}
                   onRequestEdit={(blockId) => setEditingBlockId(blockId)}
                 />
