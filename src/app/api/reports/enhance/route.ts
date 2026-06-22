@@ -6,6 +6,8 @@ import { sendReportCompletedEmail } from '@/lib/email';
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import mammoth from 'mammoth';
+import * as pdfParseModule from 'pdf-parse';
+const pdfParse = (pdfParseModule as any).default ?? pdfParseModule;
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -78,6 +80,54 @@ function magicMatches(
         buffer.subarray(0, 4).toString('latin1') === 'RIFF' &&
         buffer.subarray(8, 12).toString('latin1') === 'WEBP'
       );
+  }
+}
+
+// ── Number extraction utilities for post-generation validation ──
+
+// Extract all numeric values from a string (HTML or plain text).
+// Returns an array of normalised numeric strings without formatting.
+function extractNumbers(text: string): string[] {
+  // Strip HTML tags first for HTML input
+  const plain = text.replace(/<[^>]+>/g, ' ');
+  const results: string[] = [];
+
+  // Match: currency values (A$1,429 / NZ$3.65 / $164.87), percentages (52.4%),
+  // delta arrows (▲12.3% / ▼0.45%), plain numbers with optional commas/decimals
+  const pattern = /(?:[A-Z]{0,2}\$|NZD\s*|AUD\s*)?([\d]{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)%?/g;
+  let m: RegExpExecArray | null;
+  while ((m = pattern.exec(plain)) !== null) {
+    const raw = m[1];
+    if (!raw || raw === '') continue;
+    // Normalise: remove commas, parse as float, convert back to string
+    const normalised = parseFloat(raw.replace(/,/g, '')).toString();
+    if (!isNaN(parseFloat(normalised)) && normalised !== 'NaN') {
+      results.push(normalised);
+    }
+  }
+  return results;
+}
+
+// Check whether a generated number can be found in the source number set,
+// allowing for rounding tolerance (within 0.5% of value, min 0.05 absolute).
+function isNumberInSource(value: number, sourceNumbers: Set<string>): boolean {
+  for (const s of sourceNumbers) {
+    const src = parseFloat(s);
+    if (isNaN(src)) continue;
+    if (src === value) return true;
+    const tolerance = Math.max(0.05, Math.abs(src) * 0.005);
+    if (Math.abs(src - value) <= tolerance) return true;
+  }
+  return false;
+}
+
+// Extract text from a PDF buffer. Returns empty string on failure (non-fatal).
+async function extractPdfText(buffer: Buffer): Promise<string> {
+  try {
+    const result = await pdfParse(buffer);
+    return result.text || '';
+  } catch {
+    return '';
   }
 }
 
@@ -205,10 +255,31 @@ async function processReport(reportId: string, report: any) {
       return;
     }
 
-    // Download all report files
+    // Download all report files; also collect PDF buffers for later validation
+    const sourcePdfBuffers: Buffer[] = [];
     for (const path of storagePaths) {
-      const block = await downloadAsContentBlock(supabase, 'report-pdfs', path);
-      if (block) documentBlocks.push(block);
+      const { data: fileData } = await supabase.storage.from('report-pdfs').download(path);
+      if (fileData) {
+        const buf = Buffer.from(await fileData.arrayBuffer());
+        sourcePdfBuffers.push(buf);
+        const classified = classifyByExtension(path);
+        if (classified.kind === 'pdf' && magicMatches(buf, 'pdf')) {
+          const b64 = buf.toString('base64');
+          documentBlocks.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } });
+        } else if (classified.kind === 'docx-text') {
+          try {
+            const result = await mammoth.extractRawText({ buffer: buf });
+            if (result.value?.trim()) {
+              documentBlocks.push({ type: 'text', text: `[Content extracted from ${path.split('/').pop()}]\n\n${result.value}` });
+            }
+          } catch {}
+        } else if (classified.kind === 'image') {
+          const magicKind = classified.mediaType as 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp';
+          if (magicMatches(buf, magicKind)) {
+            documentBlocks.push({ type: 'image', source: { type: 'base64', media_type: classified.mediaType, data: buf.toString('base64') } });
+          }
+        }
+      }
     }
 
     if (documentBlocks.length === 0) {
@@ -460,27 +531,116 @@ You are a digital marketing report specialist for Shtudio, a Sydney digital agen
 
 Your task is to produce a complete, self-contained HTML file for ${clientName}${periodInfo} that matches the exact design standard of the reference template below. The attached document(s) contain all the raw data and metrics you need — extract everything from them.
 
-DATA FIDELITY — ABSOLUTE RULE — READ THIS FIRST:
+ABSOLUTE RULES — VIOLATION OF ANY OF THESE INVALIDATES THE REPORT
+═══════════════════════════════════════════════════════════════════
+
+These rules take precedence over every other instruction in this prompt, including tone, structure, layout, and report-type instructions. If following a later rule would require violating any rule below, the rule below wins. Always.
+
+§1. DATA FIDELITY — ZERO TOLERANCE
 Every number, percentage, currency value, conversion count, date, period label, comparison delta, and named entity in the generated report MUST come directly from the source PDF or admin-provided content. No exceptions.
 
 You may NOT:
-- Invent numbers, even plausible-looking ones
-- Estimate, extrapolate, interpolate, or project numbers not present in the source
+- State a metric that does not appear in a source file
+- Approximate a number that has an exact value ("around 15%" when the exact figure is 15.41%)
+- Copy a MoM % from a source document without first verifying it against the raw values
 - Fill gaps in historical data with calculated approximations
-- Round numbers in ways that change their value (90.24 stays 90.24, not 90.2 unless explicitly shown that way in the source)
+- Round numbers in ways that change their stated value (90.24 stays 90.24, not 90.2 unless shown that way in the source)
 - Generate "example" or "placeholder" numbers that look like real data
 - Average, sum, or aggregate numbers across periods unless the source explicitly provides the aggregate
 - Convert between units, currencies, or formats unless the source provides the converted value
 
-If the source PDF contains data for one period (e.g. April vs May), do NOT generate sections that compare three or more periods unless data for all those periods is explicitly present in the source.
-
-If a section template would normally show historical context (three-month trends, year-over-year comparisons, quarterly trajectories) but the source data only covers one or two periods, OMIT that section entirely. Do not partially fill it with available data and invent the rest. Do not write "data not available" placeholders in number fields. The section either renders with verified data, or it doesn't render at all.
+Every MoM % figure must be independently derivable from the source raw values using: ((Current − Previous) / Previous) × 100. If the source document states a MoM % that does not match the calculation from its own raw figures, use the calculated figure and note the discrepancy (per rule B12 in the reporting framework).
 
 If you are tempted to generate a number because the report layout expects one, STOP. Omit the field, the row, or the entire block. A missing section is acceptable. A fabricated number is not.
 
-Internal consistency: every number that appears in the report must be the same number wherever it appears. The same metric value cannot appear as 78.19 in one section and 95.2 in another. If you produce contradictory numbers between two sections of the same report, the report is broken — re-derive both from the single source figure.
+§2. HISTORICAL DATA — NO INTERPOLATION
+You may reference historical data from the previous reports provided in context ONLY for metrics where you can read the exact figure from the historical HTML. You may NOT derive, infer, re-calculate, or interpolate historical numbers. If a metric value is not explicitly visible in the historical HTML for a given period, treat it as unavailable and do not use it.
 
-This rule overrides every other rule in this prompt. If TONE or STRUCTURE rules would push you toward fluent narrative that requires data you don't have, the data rule wins. Always.
+§3. MULTI-PERIOD SECTIONS — CONDITIONAL RENDERING
+If a section template would normally show historical context (three-month trends, year-over-year comparisons, quarterly trajectories) but the source data only covers one or two periods, OMIT that section entirely.
+
+The period-trend-cards block type is CONDITIONAL: only render it if you have explicitly verified numerical data for each period you would display. A source that shows only "current month vs previous month" does NOT provide enough data for a three-month trajectory — do not generate the third month's numbers by any form of calculation or estimation.
+
+Do not partially fill a multi-period section with available data and invent the rest. Do not write "data not available" placeholders in number fields. The section either renders with fully verified data, or it does not render at all.
+
+§4. INTERNAL CONSISTENCY — SAME VALUE EVERYWHERE
+Every number that appears in the report must be identical wherever it appears. The same metric value cannot appear as 78.19 in one section and 78.2 or 95.2 in another. If you produce contradictory numbers between two sections of the same report, the report is broken — re-derive both from the single source figure before output.
+
+§5. NARRATIVE FIDELITY — NO INVENTED CONTEXT
+You may NOT:
+- Describe a declining metric as stable, maintained, or growing
+- Apply positive framing ("strong performance", "excellent efficiency", "continued momentum") to a result that declined materially
+- Present a hypothesis or assumption as a confirmed fact
+- Add unsupported causal explanations ("conversions increased due to the new keyword strategy" requires evidence that the keyword strategy changed and produced the result)
+- Use vague superlative claims ("excellent performance", "outstanding results", "strong growth", "the best month yet") unless a specific metric in the source justifies the claim
+
+Possible explanations for performance changes may be offered cautiously but must be labelled as hypotheses: "this may reflect", "one possible factor is", "this is consistent with".
+
+§6. RECOMMENDATIONS — AGENCY VOICE ONLY
+Recommendations carry agency authority; observations and analysis do not. Never blur that line.
+
+If the source content contains explicit recommendations, action items, "next steps", or "plan for next month", reproduce them with their original meaning and intent fully preserved. You MAY lightly adjust wording for grammar and clarity but NEVER alter the substance or scope. You MAY NOT add recommendations of your own.
+
+If no recommendations are present in the source, the Recommendations section must either be omitted entirely or contain ONLY data-driven observations framed as observations, not prescriptions — e.g. "Conversion rate dropped 22% this period, which warrants attention" rather than "We recommend optimising landing pages".
+
+§7. COMPARISON PERIODS — ALWAYS LABELLED
+Every delta badge (▲/▼ with a percentage) implicitly references a comparison baseline. The reader must always know what that baseline is. Every block displaying period-over-period numbers must have a <p class="comparison-note"> directly under its heading stating the comparison period. Never write a delta without a baseline.
+
+If the source does not explicitly state the comparison period, infer the most likely period from the report's primary date range and label it with "estimated":
+   <p class="comparison-note">vs. previous month (estimated: 1–31 Mar 2026)</p>
+
+§8. SECTION OMISSION — DEFAULT BEHAVIOUR
+If a section cannot be populated with fully verified source data, omit it. Do not:
+- Render a section with blank or placeholder values
+- Render a section with invented data to fill the layout
+- Render a section that requires three periods of data when only two are available
+
+A shorter report with accurate data is always better than a longer report with invented data.
+
+═══════════════════════════════════════════════════════════════════
+END OF ABSOLUTE RULES
+═══════════════════════════════════════════════════════════════════
+
+EXAMPLES OF CORRECT vs INCORRECT BEHAVIOUR
+═══════════════════════════════════════════
+
+Example 1 — Source data covers Apr/May only:
+✗ INCORRECT: Renders Three-Month Trajectory with invented March numbers
+✓ CORRECT: Omits Three-Month Trajectory (period-trend-cards) section entirely
+✓ CORRECT: Renders Two-Month Comparison (comparison-grid) with verified Apr and May numbers
+
+Example 2 — Source narrative says "conversions improved":
+✗ INCORRECT: Output says "conversions improved by 12.4%" (percentage not in source)
+✓ CORRECT: Output says "conversions improved" (matches source qualitative claim)
+✓ CORRECT: Output says "conversions rose from 78.19 to 90.24" (both numbers verified in source)
+
+Example 3 — Source mentions a campaign briefly:
+✗ INCORRECT: Output speculates "the Brand campaign likely drove this due to seasonal demand"
+✓ CORRECT: Output states only what the source says about the campaign
+
+Example 4 — Source has no recommendations:
+✗ INCORRECT: AI generates "We recommend optimising landing pages for better conversion"
+✓ CORRECT: Recommendations section omitted, OR contains only observations: "Conversion rate declined 22% — this warrants attention in the next period"
+
+Example 5 — Source states impression growth "grew by 30.5%" but raw figures calculate to +20.31%:
+✗ INCORRECT: Report states "30.5%" (copied from source without verification)
+✓ CORRECT: Report states "+20.31%" (independently calculated from raw figures); adds footnote noting discrepancy with source
+
+Example 6 — Revenue fell 77% but campaign drove significant traffic:
+✗ INCORRECT: "Revenue maintained strong trajectory" or "Strong performance across the account"
+✓ CORRECT: "Revenue declined 77.4% to A$1,429, consistent with the active promotional period where users are in the research phase"
+
+Example 7 — MoM % appears in source but raw values tell a different story:
+✗ INCORRECT: Copy MoM % from source PDF without checking: "conversions grew +14.25%"
+✓ CORRECT: Recalculate from raw figures (78.19 → 90.24 = +15.41%); use +15.41%
+
+Example 8 — Source lists 5 underperforming campaigns:
+✗ INCORRECT: Output lists only 2 of them (campaigns silently omitted)
+✓ CORRECT: Output lists all 5, exactly as named in the source
+
+═══════════════════════════════════════════════════════════════════
+END OF EXAMPLES
+═══════════════════════════════════════════════════════════════════
 
 TONE & STRUCTURE — CRITICAL (applies to every report type):
 Reports must always lead with positives where they exist, even small ones, before discussing what needs attention. A report that reads as a list of bad news erodes the client's confidence in the agency, even when the underlying nuance is real. Find the angle.
@@ -714,14 +874,18 @@ Structural constraints:
 * The header, .header-accent, and footer stay OUTSIDE <div class="main"> and are NOT wrapped as blocks.
 * Use a fresh integer suffix for each instance of a repeatable block type within one report. Across a report you might have data-table-0, data-table-1, data-table-2 (e.g. for top pages, top queries, landing pages); narrative-0, narrative-1; etc.
 
-FINAL CHECK BEFORE OUTPUT:
-Before emitting your response, mentally verify:
-1. Every number in your output traces back to the source content — you can point to the exact figure in the PDF or historical HTML
-2. The same metric has the same value everywhere it appears in the report — no contradictions between sections
-3. No section was generated that required data not present in the source (especially multi-period trajectory sections)
-4. No comparison delta was calculated against an invented or estimated baseline
+FINAL CHECK BEFORE OUTPUT (verify all §1–§8 rules):
+Before emitting your response, confirm each item:
+1. §1 DATA FIDELITY — every number traces to a source file; no MoM % was copied without recalculation
+2. §2 HISTORICAL DATA — no historical figures were inferred or interpolated
+3. §3 MULTI-PERIOD — no multi-period section was rendered without data for all periods
+4. §4 INTERNAL CONSISTENCY — the same metric has the same value everywhere in the report
+5. §5 NARRATIVE — no declining metric is described as improving; no superlatives without supporting data
+6. §6 RECOMMENDATIONS — no recommendations were invented; only agency-authored content is present
+7. §7 COMPARISON PERIODS — every delta badge has a <p class="comparison-note"> stating its baseline
+8. §8 SECTION OMISSION — no section was populated with placeholder or invented data
 
-If you find any number that does not pass these checks, remove it. Removing a number is always safe. Inventing one is never safe.${reportTypeInstructions}${documentBlocks.length > 1 ? `
+If any item fails, remove the offending number or section. Removing data is always safe. Inventing data is never safe.${reportTypeInstructions}${documentBlocks.length > 1 ? `
 
 NOTE: Multiple report files have been attached. Use data from ALL of them to build a comprehensive report.` : ''}${clientFileBlocks.length > 0 ? `
 
@@ -1608,6 +1772,59 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
         ...(extractedPeriodEnd ? { period_end: extractedPeriodEnd } : {}),
       })
       .eq('id', reportId);
+
+    // ── Post-generation number validation (non-blocking, non-fatal) ──
+    // Extract every number from the source PDFs and compare against the
+    // generated HTML. Flag any numbers in the HTML that cannot be found in
+    // the source. False positives are expected (computed deltas, derived
+    // ratios) — warnings are surfaced to admins for review, not blockers.
+    try {
+      const sourceTexts = await Promise.all(sourcePdfBuffers.map(extractPdfText));
+      const combinedSourceText = sourceTexts.join('\n');
+
+      if (combinedSourceText.trim().length > 0) {
+        const sourceNumberStrings = new Set(extractNumbers(combinedSourceText));
+        const htmlNumbers = extractNumbers(enhancedHtml);
+
+        const unmatchedNumbers: string[] = [];
+        for (const n of htmlNumbers) {
+          const val = parseFloat(n);
+          if (isNaN(val)) continue;
+          // Skip trivially small numbers (single digits, common UI numbers)
+          if (val < 2) continue;
+          if (!isNumberInSource(val, sourceNumberStrings)) {
+            unmatchedNumbers.push(n);
+          }
+        }
+
+        // Deduplicate unmatched numbers
+        const uniqueUnmatched = [...new Set(unmatchedNumbers)];
+
+        if (uniqueUnmatched.length > 0) {
+          console.warn('[validation] Unmatched numbers in report', {
+            reportId,
+            count: uniqueUnmatched.length,
+            sample: uniqueUnmatched.slice(0, 20),
+          });
+          await supabase.from('report_validation_warnings').insert({
+            report_id: reportId,
+            warning_type: 'unmatched_numbers',
+            details: {
+              unmatched_count: uniqueUnmatched.length,
+              unmatched_numbers: uniqueUnmatched.slice(0, 50),
+              source_number_count: sourceNumberStrings.size,
+              html_number_count: htmlNumbers.length,
+            },
+          });
+        } else {
+          console.log('[validation] All numbers verified against source', { reportId });
+        }
+      } else {
+        console.warn('[validation] No source text extracted from PDFs — skipping validation', { reportId });
+      }
+    } catch (validationErr) {
+      console.error('[validation] Non-fatal validation error:', validationErr);
+    }
 
     // Log the action
     await supabase.from('audit_log').insert({
