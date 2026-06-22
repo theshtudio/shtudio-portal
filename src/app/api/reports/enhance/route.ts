@@ -6,7 +6,6 @@ import { sendReportCompletedEmail } from '@/lib/email';
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import mammoth from 'mammoth';
-import { extractText, getDocumentProxy } from 'unpdf';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -118,17 +117,6 @@ function isNumberInSource(value: number, sourceNumbers: Set<string>): boolean {
     if (Math.abs(src - value) <= tolerance) return true;
   }
   return false;
-}
-
-// Extract text from a PDF buffer. Returns empty string on failure (non-fatal).
-async function extractPdfText(buffer: Buffer): Promise<string> {
-  try {
-    const pdf = await getDocumentProxy(new Uint8Array(buffer));
-    const { text } = await extractText(pdf, { mergePages: true });
-    return text || '';
-  } catch {
-    return '';
-  }
 }
 
 // Download a file from storage and return it as the right Anthropic content
@@ -255,31 +243,10 @@ async function processReport(reportId: string, report: any) {
       return;
     }
 
-    // Download all report files; also collect PDF buffers for later validation
-    const sourcePdfBuffers: Buffer[] = [];
+    // Download all report files
     for (const path of storagePaths) {
-      const { data: fileData } = await supabase.storage.from('report-pdfs').download(path);
-      if (fileData) {
-        const buf = Buffer.from(await fileData.arrayBuffer());
-        sourcePdfBuffers.push(buf);
-        const classified = classifyByExtension(path);
-        if (classified.kind === 'pdf' && magicMatches(buf, 'pdf')) {
-          const b64 = buf.toString('base64');
-          documentBlocks.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } });
-        } else if (classified.kind === 'docx-text') {
-          try {
-            const result = await mammoth.extractRawText({ buffer: buf });
-            if (result.value?.trim()) {
-              documentBlocks.push({ type: 'text', text: `[Content extracted from ${path.split('/').pop()}]\n\n${result.value}` });
-            }
-          } catch {}
-        } else if (classified.kind === 'image') {
-          const magicKind = classified.mediaType as 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp';
-          if (magicMatches(buf, magicKind)) {
-            documentBlocks.push({ type: 'image', source: { type: 'base64', media_type: classified.mediaType, data: buf.toString('base64') } });
-          }
-        }
-      }
+      const block = await downloadAsContentBlock(supabase, 'report-pdfs', path);
+      if (block) documentBlocks.push(block);
     }
 
     if (documentBlocks.length === 0) {
@@ -885,7 +852,27 @@ Before emitting your response, confirm each item:
 7. §7 COMPARISON PERIODS — every delta badge has a <p class="comparison-note"> stating its baseline
 8. §8 SECTION OMISSION — no section was populated with placeholder or invented data
 
-If any item fails, remove the offending number or section. Removing data is always safe. Inventing data is never safe.${reportTypeInstructions}${documentBlocks.length > 1 ? `
+If any item fails, remove the offending number or section. Removing data is always safe. Inventing data is never safe.
+
+SOURCE NUMBERS — REQUIRED AFTER THE HTML:
+After the complete HTML report, append a JSON extraction block listing every numeric value you read directly from the source PDF(s). This block is used for automated data-fidelity validation and will be stripped before the report is saved.
+
+Format — output this exactly, on its own lines, after the closing </html> tag:
+
+<!-- SOURCE_NUMBERS_START -->
+{"numbers": [
+  {"value": 90.24, "context": "Total Conversions May 2026"},
+  {"value": 78.19, "context": "Total Conversions April 2026"}
+]}
+<!-- SOURCE_NUMBERS_END -->
+
+Rules for the SOURCE_NUMBERS block:
+- Include every distinct numeric value you extracted from the source (counts, percentages, currency amounts, rates, positions, dates-as-numbers)
+- Use the raw numeric value only — no currency symbols, no % signs, no commas (e.g. 1429 not A$1,429, 20.31 not 20.31%)
+- The "context" field is a short label identifying where the number came from — used for debugging only
+- Do NOT include numbers you computed or derived yourself (e.g. a MoM % you calculated) — only numbers explicitly present in the source
+- Do NOT include the same value twice with different contexts — pick the most descriptive context
+- If no numeric data is present in the source (unusual), output: {"numbers": []}${reportTypeInstructions}${documentBlocks.length > 1 ? `
 
 NOTE: Multiple report files have been attached. Use data from ALL of them to build a comprehensive report.` : ''}${clientFileBlocks.length > 0 ? `
 
@@ -1757,6 +1744,31 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
       clientMismatch = false;
     }
 
+    // ── Extract and strip SOURCE_NUMBERS block from the response ──
+    let sourceNumbers: Array<{ value: number; context: string }> = [];
+    const sourceBlockMatch = rawResponse.match(
+      /<!--\s*SOURCE_NUMBERS_START\s*-->([\s\S]*?)<!--\s*SOURCE_NUMBERS_END\s*-->/,
+    );
+    if (sourceBlockMatch) {
+      try {
+        const parsed = JSON.parse(sourceBlockMatch[1].trim());
+        if (Array.isArray(parsed.numbers)) {
+          sourceNumbers = parsed.numbers.filter(
+            (n: any) => typeof n.value === 'number' && !isNaN(n.value),
+          );
+        }
+      } catch (parseErr) {
+        console.warn('[validation] Failed to parse SOURCE_NUMBERS JSON:', parseErr);
+      }
+      // Strip the block (including any trailing whitespace/newlines) from the HTML
+      rawResponse = rawResponse.replace(
+        /\s*<!--\s*SOURCE_NUMBERS_START\s*-->[\s\S]*?<!--\s*SOURCE_NUMBERS_END\s*-->\s*/,
+        '',
+      );
+    } else {
+      console.warn('[validation] SOURCE_NUMBERS block not found in response', { reportId });
+    }
+
     const enhancedHtml = rawResponse.trim();
 
     // Save enhanced HTML, mismatch info, extracted dates, and mark as completed
@@ -1774,30 +1786,25 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
       .eq('id', reportId);
 
     // ── Post-generation number validation (non-blocking, non-fatal) ──
-    // Extract every number from the source PDFs and compare against the
-    // generated HTML. Flag any numbers in the HTML that cannot be found in
-    // the source. False positives are expected (computed deltas, derived
-    // ratios) — warnings are surfaced to admins for review, not blockers.
+    // Claude extracted source numbers from the PDF as part of the same API
+    // call. Compare those against numbers appearing in the generated HTML.
+    // Flag any HTML number not traceable to the source list.
     try {
-      const sourceTexts = await Promise.all(sourcePdfBuffers.map(extractPdfText));
-      const combinedSourceText = sourceTexts.join('\n');
-
-      if (combinedSourceText.trim().length > 0) {
-        const sourceNumberStrings = new Set(extractNumbers(combinedSourceText));
+      if (sourceNumbers.length > 0) {
+        const sourceNumberStrings = new Set(sourceNumbers.map((n) => String(n.value)));
         const htmlNumbers = extractNumbers(enhancedHtml);
 
         const unmatchedNumbers: string[] = [];
         for (const n of htmlNumbers) {
           const val = parseFloat(n);
           if (isNaN(val)) continue;
-          // Skip trivially small numbers (single digits, common UI numbers)
+          // Skip trivially small numbers unlikely to be meaningful data points
           if (val < 2) continue;
           if (!isNumberInSource(val, sourceNumberStrings)) {
             unmatchedNumbers.push(n);
           }
         }
 
-        // Deduplicate unmatched numbers
         const uniqueUnmatched = [...new Set(unmatchedNumbers)];
 
         if (uniqueUnmatched.length > 0) {
@@ -1812,7 +1819,7 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
             details: {
               unmatched_count: uniqueUnmatched.length,
               unmatched_numbers: uniqueUnmatched.slice(0, 50),
-              source_number_count: sourceNumberStrings.size,
+              source_number_count: sourceNumbers.length,
               html_number_count: htmlNumbers.length,
             },
           });
@@ -1820,7 +1827,7 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
           console.log('[validation] All numbers verified against source', { reportId });
         }
       } else {
-        console.warn('[validation] No source text extracted from PDFs — skipping validation', { reportId });
+        console.warn('[validation] No source numbers from Claude — skipping validation', { reportId });
       }
     } catch (validationErr) {
       console.error('[validation] Non-fatal validation error:', validationErr);
