@@ -1623,7 +1623,7 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
 
     // Call Claude API
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 16384,
       messages: [
         {
