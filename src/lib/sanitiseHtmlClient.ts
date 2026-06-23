@@ -7,6 +7,9 @@
 
 import DOMPurify from 'dompurify';
 
+// Inline formatting only — no headings, divs, or spans. This matches what
+// narrative blocks support and prevents execCommand from introducing elements
+// that break the block's existing CSS wrapper and spacing.
 const ALLOWED_TAGS = [
   'p',
   'br',
@@ -19,25 +22,16 @@ const ALLOWED_TAGS = [
   'ul',
   'ol',
   'li',
-  'h2',
-  'h3',
-  'h4',
-  'blockquote',
-  'span',
-  'div',
 ];
 
-const ALLOWED_ATTR = ['href', 'target', 'rel', 'class'];
+const ALLOWED_ATTR = ['href', 'target', 'rel'];
 
 export function sanitiseOverrideHtml(html: string): string {
   return DOMPurify.sanitize(html, {
     ALLOWED_TAGS,
     ALLOWED_ATTR,
-    // Belt-and-braces: even though ALLOWED_TAGS / ATTR is restrictive,
-    // these flags prevent a stale DOMPurify version from letting through
-    // anything we don't want.
-    FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form'],
-    FORBID_ATTR: ['onerror', 'onload', 'onclick'],
+    FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'div', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote'],
+    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'class', 'style', 'id'],
     ALLOW_DATA_ATTR: false,
   });
 }

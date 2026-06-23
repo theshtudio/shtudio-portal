@@ -1087,22 +1087,6 @@ Here is your design template:
     position: relative;
     overflow: hidden;
   }
-  .hero-summary::before {
-    content: '';
-    position: absolute;
-    top: -60px; right: -60px;
-    width: 240px; height: 240px;
-    background: rgba(255,255,255,0.05);
-    border-radius: 50%;
-  }
-  .hero-summary::after {
-    content: '';
-    position: absolute;
-    bottom: -80px; right: 80px;
-    width: 180px; height: 180px;
-    background: rgba(255,255,255,0.04);
-    border-radius: 50%;
-  }
   .hero-summary p {
     font-size: 16px;
     opacity: 0.9;
@@ -1561,6 +1545,11 @@ Here is your design template:
 </html>
 
 Use this as your design template. Preserve all CSS exactly. Replace the content, data, client name, brand colours, and metrics with the data extracted from the attached document(s). Output only raw HTML with no markdown, no code fences, nothing else.
+
+CSS DESIGN CONSTRAINTS — CRITICAL:
+- Do NOT add border-left (left-border accent lines) to any block type in the generated CSS. Left borders on sections carry a "branded callout" visual that must not appear in client reports. The ONLY exception is .internal-note-block (the admin-only yellow internal note, which intentionally uses border-left: 4px solid #F26522 as a visual signal that it is hidden from clients). Every other block — narrative sections, insight callouts, recommendation blocks, summary cards, and any other section — must use zero left border.
+- Do NOT add ::before or ::after pseudo-elements with border-radius: 50% to any section. Circular decorative overlays are not part of this design system.
+- Where visual separation is needed, use box-shadow, border-radius, padding, or a subtle 1px bottom border in var(--border) colour — not a left-border stripe.
 
 TYPOGRAPHY INSTRUCTIONS — CRITICAL:
 The report uses three fonts loaded from Google Fonts. You MUST preserve these exactly:
