@@ -83,27 +83,62 @@ function magicMatches(
 
 // ── Number extraction utilities for post-generation validation ──
 
-// Extract all numeric values from a string (HTML or plain text).
-// Returns an array of normalised numeric strings without formatting.
-function extractNumbers(text: string): string[] {
-  // Strip HTML tags first for HTML input
-  const plain = text.replace(/<[^>]+>/g, ' ');
-  const results: string[] = [];
+// Extract numeric values from HTML that have strong "real data" signals.
+// Deliberately ignores plain integers without context — CSS px values, font
+// sizes, hex colour fragments, and chart config numbers all look like data
+// but aren't. Only the following patterns are treated as data:
+//   A — currency-prefixed  (A$1,807 / NZ$3.65 / $164.87 / GBP 500)
+//   B — percentage-suffixed (6.55% / ▲12.3% / ▼0.45%)
+//   C — decimal numbers     (90.24 / 78.19 / 3.65) — CSS rarely uses X.YZ
+//   D — comma-formatted     (21,293 / 1,343) — CSS never uses thousands-commas
+//   E — delta-badge numbers (▲ 8 / ▼ 12 — plain integer inside a badge)
+function extractNumbers(html: string): string[] {
+  // Strip entire <style> and <script> blocks (content + tags) — the single
+  // largest source of false positives (CSS px values, Chart.js config numbers,
+  // hex colour channel digits like 255 from rgba(255,255,255,0.05)).
+  let text = html
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ');
 
-  // Match: currency values (A$1,429 / NZ$3.65 / $164.87), percentages (52.4%),
-  // delta arrows (▲12.3% / ▼0.45%), plain numbers with optional commas/decimals
-  const pattern = /(?:[A-Z]{0,2}\$|NZD\s*|AUD\s*)?([\d]{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)%?/g;
-  let m: RegExpExecArray | null;
-  while ((m = pattern.exec(plain)) !== null) {
-    const raw = m[1];
-    if (!raw || raw === '') continue;
-    // Normalise: remove commas, parse as float, convert back to string
-    const normalised = parseFloat(raw.replace(/,/g, '')).toString();
-    if (!isNaN(parseFloat(normalised)) && normalised !== 'NaN') {
-      results.push(normalised);
-    }
+  // Strip HTML tags and their attributes, leaving only visible text content.
+  text = text.replace(/<[^>]+>/g, ' ');
+
+  // Remove hex colour fragments and rgb/rgba calls that survive tag stripping.
+  text = text.replace(/#[0-9a-fA-F]{3,8}/g, ' ');
+  text = text.replace(/rgba?\s*\([^)]+\)/gi, ' ');
+
+  const seen = new Set<string>();
+  function add(raw: string) {
+    const n = parseFloat(raw.replace(/,/g, ''));
+    if (!isNaN(n) && n >= 0) seen.add(n.toString());
   }
-  return results;
+
+  let m: RegExpExecArray | null;
+
+  // A — currency prefix
+  const rCurrency = /(?:[A-Z]{0,3}\$|AUD|NZD|GBP|USD|EUR)\s*([\d]{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)/gi;
+  while ((m = rCurrency.exec(text)) !== null) add(m[1]);
+
+  // B — percentage suffix
+  const rPercent = /\b([\d]{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)%/g;
+  while ((m = rPercent.exec(text)) !== null) add(m[1]);
+
+  // C — decimal numbers (must have at least one non-zero digit after the point)
+  const rDecimal = /\b(\d+\.\d+)\b/g;
+  while ((m = rDecimal.exec(text)) !== null) {
+    const n = parseFloat(m[1]);
+    if (!isNaN(n) && n >= 2) add(m[1]); // skip 0.x and 1.x — CSS line-height etc.
+  }
+
+  // D — comma-formatted integers (CSS never uses thousands separators)
+  const rComma = /\b(\d{1,3}(?:,\d{3})+)\b/g;
+  while ((m = rComma.exec(text)) !== null) add(m[1]);
+
+  // E — number immediately following a delta arrow
+  const rDelta = /[▲▼↑↓]\s*(\d+(?:\.\d+)?)/g;
+  while ((m = rDelta.exec(text)) !== null) add(m[1]);
+
+  return [...seen];
 }
 
 // Check whether a generated number can be found in the source number set,
