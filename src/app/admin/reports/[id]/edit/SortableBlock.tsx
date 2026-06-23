@@ -11,7 +11,6 @@ interface SortableBlockProps {
   block: ParsedBlock;
   isHidden: boolean;
   overrideHtml?: string | null;
-  hasWarning?: boolean;
   onToggleHide: (blockId: string) => void;
   onRequestEdit: (blockId: string) => void;
 }
@@ -27,7 +26,6 @@ export function SortableBlock({
   block,
   isHidden,
   overrideHtml,
-  hasWarning = false,
   onToggleHide,
   onRequestEdit,
 }: SortableBlockProps) {
@@ -66,12 +64,8 @@ export function SortableBlock({
     .filter(Boolean)
     .join(' ');
 
-  const warningBorder: React.CSSProperties = hasWarning
-    ? { outline: '2px solid #F59E0B', outlineOffset: '2px', borderRadius: '4px' }
-    : {};
-
   return (
-    <div ref={setNodeRef} style={{ ...style, ...warningBorder }} className={wrapClasses} data-block-wrap-id={block.id}>
+    <div ref={setNodeRef} style={style} className={wrapClasses} data-block-wrap-id={block.id}>
       <div className={styles.blockOverlay}>
         <div className={styles.overlayLeft}>
           <button
@@ -84,14 +78,6 @@ export function SortableBlock({
             ⋮⋮
           </button>
           <span className={styles.blockTypeLabel}>{block.title ?? block.type}</span>
-          {hasWarning && (
-            <span
-              title="This block contains numbers that could not be verified against the source PDF"
-              style={{ fontSize: '14px', cursor: 'help' }}
-            >
-              ⚠️
-            </span>
-          )}
         </div>
         <div className={styles.overlayRight}>
           <button

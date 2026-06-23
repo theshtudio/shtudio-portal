@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
+import { createServerSupabase } from '@/lib/supabase/server';
 import type { BlocksConfig } from '@/lib/types';
 import { BlockEditor } from './BlockEditor';
 
@@ -49,17 +49,6 @@ export default async function ReportEditPage({
   const hasUnpublishedChanges =
     draft != null && JSON.stringify(draft) !== JSON.stringify(published);
 
-  // Fetch validation warnings to surface in block editor
-  const serviceSupabase = createServiceSupabase();
-  const { data: warnings } = await serviceSupabase
-    .from('report_validation_warnings')
-    .select('details')
-    .eq('report_id', id)
-    .order('created_at', { ascending: false })
-    .limit(1);
-
-  const unmatchedNumbers: string[] = warnings?.[0]?.details?.unmatched_numbers ?? [];
-
   return (
     <BlockEditor
       reportId={report.id}
@@ -68,7 +57,6 @@ export default async function ReportEditPage({
       initialDraft={draft}
       initialPublished={published}
       hasUnpublishedChanges={hasUnpublishedChanges}
-      unmatchedNumbers={unmatchedNumbers}
     />
   );
 }

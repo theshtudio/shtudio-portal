@@ -12,7 +12,6 @@ import { EditableTitle } from './EditableTitle';
 import { ReportDetailsCard } from './ReportDetailsCard';
 import { ReportHtml } from '@/components/ReportHtml/ReportHtml';
 import type { ReportCommentWithAuthor } from '@/lib/types';
-import { ValidationWarnings } from './ValidationWarnings';
 import styles from './page.module.css';
 
 export default async function ReportDetailPage({
@@ -52,13 +51,6 @@ export default async function ReportDetailPage({
     .select('id, name')
     .eq('is_active', true)
     .order('name');
-
-  // Fetch validation warnings for this report
-  const { data: validationWarnings } = await serviceSupabase
-    .from('report_validation_warnings')
-    .select('id, warning_type, details, created_at')
-    .eq('report_id', id)
-    .order('created_at', { ascending: false });
 
   // Fetch comments (using service role to bypass RLS for admin view)
   const { data: comments } = await serviceSupabase
@@ -164,10 +156,6 @@ export default async function ReportDetailPage({
 
       {/* Custom Instructions */}
       <CustomInstructions reportId={report.id} initialValue={report.custom_instructions || ''} />
-
-      {validationWarnings && validationWarnings.length > 0 && (
-        <ValidationWarnings warnings={validationWarnings as any} />
-      )}
 
       <div className={styles.previewSection}>
         <h2 className={styles.sectionTitle}>Report Preview</h2>

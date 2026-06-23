@@ -81,79 +81,6 @@ function magicMatches(
   }
 }
 
-// ── Number extraction utilities for post-generation validation ──
-
-// Extract numeric values from HTML that have strong "real data" signals.
-// Deliberately ignores plain integers without context — CSS px values, font
-// sizes, hex colour fragments, and chart config numbers all look like data
-// but aren't. Only the following patterns are treated as data:
-//   A — currency-prefixed  (A$1,807 / NZ$3.65 / $164.87 / GBP 500)
-//   B — percentage-suffixed (6.55% / ▲12.3% / ▼0.45%)
-//   C — decimal numbers     (90.24 / 78.19 / 3.65) — CSS rarely uses X.YZ
-//   D — comma-formatted     (21,293 / 1,343) — CSS never uses thousands-commas
-//   E — delta-badge numbers (▲ 8 / ▼ 12 — plain integer inside a badge)
-function extractNumbers(html: string): string[] {
-  // Strip entire <style> and <script> blocks (content + tags) — the single
-  // largest source of false positives (CSS px values, Chart.js config numbers,
-  // hex colour channel digits like 255 from rgba(255,255,255,0.05)).
-  let text = html
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ');
-
-  // Strip HTML tags and their attributes, leaving only visible text content.
-  text = text.replace(/<[^>]+>/g, ' ');
-
-  // Remove hex colour fragments and rgb/rgba calls that survive tag stripping.
-  text = text.replace(/#[0-9a-fA-F]{3,8}/g, ' ');
-  text = text.replace(/rgba?\s*\([^)]+\)/gi, ' ');
-
-  const seen = new Set<string>();
-  function add(raw: string) {
-    const n = parseFloat(raw.replace(/,/g, ''));
-    if (!isNaN(n) && n >= 0) seen.add(n.toString());
-  }
-
-  let m: RegExpExecArray | null;
-
-  // A — currency prefix
-  const rCurrency = /(?:[A-Z]{0,3}\$|AUD|NZD|GBP|USD|EUR)\s*([\d]{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)/gi;
-  while ((m = rCurrency.exec(text)) !== null) add(m[1]);
-
-  // B — percentage suffix
-  const rPercent = /\b([\d]{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)%/g;
-  while ((m = rPercent.exec(text)) !== null) add(m[1]);
-
-  // C — decimal numbers (must have at least one non-zero digit after the point)
-  const rDecimal = /\b(\d+\.\d+)\b/g;
-  while ((m = rDecimal.exec(text)) !== null) {
-    const n = parseFloat(m[1]);
-    if (!isNaN(n) && n >= 2) add(m[1]); // skip 0.x and 1.x — CSS line-height etc.
-  }
-
-  // D — comma-formatted integers (CSS never uses thousands separators)
-  const rComma = /\b(\d{1,3}(?:,\d{3})+)\b/g;
-  while ((m = rComma.exec(text)) !== null) add(m[1]);
-
-  // E — number immediately following a delta arrow
-  const rDelta = /[▲▼↑↓]\s*(\d+(?:\.\d+)?)/g;
-  while ((m = rDelta.exec(text)) !== null) add(m[1]);
-
-  return [...seen];
-}
-
-// Check whether a generated number can be found in the source number set,
-// allowing for rounding tolerance (within 0.5% of value, min 0.05 absolute).
-function isNumberInSource(value: number, sourceNumbers: Set<string>): boolean {
-  for (const s of sourceNumbers) {
-    const src = parseFloat(s);
-    if (isNaN(src)) continue;
-    if (src === value) return true;
-    const tolerance = Math.max(0.05, Math.abs(src) * 0.005);
-    if (Math.abs(src - value) <= tolerance) return true;
-  }
-  return false;
-}
-
 // Download a file from storage and return it as the right Anthropic content
 // block kind for that file:
 //   .pdf  → document block (only application/pdf is accepted in document blocks)
@@ -909,25 +836,7 @@ Before emitting your response, confirm each item:
 
 If any item fails, remove the offending number or section. Removing data is always safe. Inventing data is never safe.
 
-SOURCE NUMBERS — REQUIRED AFTER THE HTML:
-After the complete HTML report, append a JSON extraction block listing every numeric value you read directly from the source PDF(s). This block is used for automated data-fidelity validation and will be stripped before the report is saved.
-
-Format — output this exactly, on its own lines, after the closing </html> tag:
-
-<!-- SOURCE_NUMBERS_START -->
-{"numbers": [
-  {"value": 90.24, "context": "Total Conversions May 2026"},
-  {"value": 78.19, "context": "Total Conversions April 2026"}
-]}
-<!-- SOURCE_NUMBERS_END -->
-
-Rules for the SOURCE_NUMBERS block:
-- Include every distinct numeric value you extracted from the source (counts, percentages, currency amounts, rates, positions, dates-as-numbers)
-- Use the raw numeric value only — no currency symbols, no % signs, no commas (e.g. 1429 not A$1,429, 20.31 not 20.31%)
-- The "context" field is a short label identifying where the number came from — used for debugging only
-- Do NOT include numbers you computed or derived yourself (e.g. a MoM % you calculated) — only numbers explicitly present in the source
-- Do NOT include the same value twice with different contexts — pick the most descriptive context
-- If no numeric data is present in the source (unusual), output: {"numbers": []}${reportTypeInstructions}${documentBlocks.length > 1 ? `
+${reportTypeInstructions}${documentBlocks.length > 1 ? `
 
 NOTE: Multiple report files have been attached. Use data from ALL of them to build a comprehensive report.` : ''}${clientFileBlocks.length > 0 ? `
 
@@ -1788,41 +1697,6 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
       clientMismatch = false;
     }
 
-    // ── Extract and strip SOURCE_NUMBERS block from the response ──
-    // Uses indexOf so truncated responses (no END marker) are handled safely.
-    let sourceNumbers: Array<{ value: number; context: string }> = [];
-    const START_MARKER = '<!-- SOURCE_NUMBERS_START -->';
-    const END_MARKER = '<!-- SOURCE_NUMBERS_END -->';
-    const startIdx = rawResponse.indexOf(START_MARKER);
-    const endIdx = rawResponse.indexOf(END_MARKER);
-
-    if (startIdx === -1) {
-      console.warn('[enhance:source-numbers] no START marker in response', { reportId });
-      // rawResponse is used as-is
-    } else if (endIdx === -1) {
-      // Truncated response — Claude hit max_tokens before closing the JSON block.
-      // Strip everything from START to end of string so the HTML is clean.
-      console.warn('[enhance:source-numbers] truncated response — no END marker; stripping from START', { reportId });
-      rawResponse = rawResponse.slice(0, startIdx);
-    } else {
-      // Both markers present — parse JSON, then excise the block from the HTML.
-      const jsonBlock = rawResponse.slice(startIdx + START_MARKER.length, endIdx).trim();
-      try {
-        const parsed = JSON.parse(jsonBlock);
-        if (Array.isArray(parsed.numbers)) {
-          sourceNumbers = parsed.numbers.filter(
-            (n: any) => typeof n.value === 'number' && !isNaN(n.value),
-          );
-        }
-      } catch (parseErr) {
-        console.warn('[enhance:source-numbers] failed to parse JSON block:', parseErr);
-      }
-      rawResponse = (
-        rawResponse.slice(0, startIdx) +
-        rawResponse.slice(endIdx + END_MARKER.length)
-      );
-    }
-
     const enhancedHtml = rawResponse.trim();
 
     // Save enhanced HTML, mismatch info, extracted dates, and mark as completed
@@ -1838,54 +1712,6 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
         ...(extractedPeriodEnd ? { period_end: extractedPeriodEnd } : {}),
       })
       .eq('id', reportId);
-
-    // ── Post-generation number validation (non-blocking, non-fatal) ──
-    // Claude extracted source numbers from the PDF as part of the same API
-    // call. Compare those against numbers appearing in the generated HTML.
-    // Flag any HTML number not traceable to the source list.
-    try {
-      if (sourceNumbers.length > 0) {
-        const sourceNumberStrings = new Set(sourceNumbers.map((n) => String(n.value)));
-        const htmlNumbers = extractNumbers(enhancedHtml);
-
-        const unmatchedNumbers: string[] = [];
-        for (const n of htmlNumbers) {
-          const val = parseFloat(n);
-          if (isNaN(val)) continue;
-          // Skip trivially small numbers unlikely to be meaningful data points
-          if (val < 2) continue;
-          if (!isNumberInSource(val, sourceNumberStrings)) {
-            unmatchedNumbers.push(n);
-          }
-        }
-
-        const uniqueUnmatched = [...new Set(unmatchedNumbers)];
-
-        if (uniqueUnmatched.length > 0) {
-          console.warn('[validation] Unmatched numbers in report', {
-            reportId,
-            count: uniqueUnmatched.length,
-            sample: uniqueUnmatched.slice(0, 20),
-          });
-          await supabase.from('report_validation_warnings').insert({
-            report_id: reportId,
-            warning_type: 'unmatched_numbers',
-            details: {
-              unmatched_count: uniqueUnmatched.length,
-              unmatched_numbers: uniqueUnmatched.slice(0, 50),
-              source_number_count: sourceNumbers.length,
-              html_number_count: htmlNumbers.length,
-            },
-          });
-        } else {
-          console.log('[validation] All numbers verified against source', { reportId });
-        }
-      } else {
-        console.warn('[validation] No source numbers from Claude — skipping validation', { reportId });
-      }
-    } catch (validationErr) {
-      console.error('[validation] Non-fatal validation error:', validationErr);
-    }
 
     // Log the action
     await supabase.from('audit_log').insert({
