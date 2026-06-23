@@ -364,11 +364,31 @@ Apply the DELTA BADGE DIRECTION rules below when choosing pill colours — colou
         }
       }
 
+      // Backlinks rule — applies to SEO, GBP, and combined (NOT paid-ad reports).
+      // Paid-ad reports can contain legitimate client-facing URLs (landing pages,
+      // tracking links) that must not be suppressed.
+      const BACKLINKS_RULE = `
+BACKLINKS — COUNT AND CATEGORY ONLY:
+When the source content includes backlink-building activity (external links placed on third-party sites to support organic SEO or GBP visibility):
+- Show the count of links built and the category description only. Example: "15 links built across directories, catalogues, and external services."
+- NEVER list the actual URLs or domain names of placed backlinks.
+- NEVER reproduce raw lists of sites where links were placed.
+- If the source lists specific URLs or domains for placed backlinks, summarise by category — do not name individual sites.
+
+This rule applies ONLY to backlink-building work listed as agency activity (typically in "Work Completed" sections). It does NOT apply to:
+- The client's own website URLs (landing pages, product pages)
+- Tracking links and UTM-tagged URLs
+- Campaign destination URLs in paid ad sections
+- Reference links to industry standards, documentation, or tools
+Distinguishing factor: backlink-building entries are agency work performed FOR the client on external sites. Other URLs are operational details of the campaign or content itself.`;
+
+      if (report.report_type === 'gbp') {
+        reportTypeInstructions += BACKLINKS_RULE;
+      }
+
       // SEO-specific instructions
       if (report.report_type === 'seo' || report.report_type === 'combined') {
-        reportTypeInstructions += `
-
-SEO BACKLINKS INSTRUCTION: For the backlinks and directories section, mention only the total number of new backlinks and directories built this month — do not list individual URLs. For example: 'This month we built 10 new backlinks across directories, forums and profile sites.' Never output the actual URLs in the client-facing report.
+        reportTypeInstructions += BACKLINKS_RULE + `
 
 SEO BADGE / PILL COLOUR CONVENTION — CRITICAL:
 Red and green pills (.m-change.down / .m-change.up) carry semantic meaning in analytics: red = negative outcome, green = positive outcome. They MUST only be used for genuine period-over-period deltas where you have actual comparison data (e.g. "↓ 12% vs last month", "↑ 8% YoY").
@@ -1745,28 +1765,38 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
     }
 
     // ── Extract and strip SOURCE_NUMBERS block from the response ──
+    // Uses indexOf so truncated responses (no END marker) are handled safely.
     let sourceNumbers: Array<{ value: number; context: string }> = [];
-    const sourceBlockMatch = rawResponse.match(
-      /<!--\s*SOURCE_NUMBERS_START\s*-->([\s\S]*?)<!--\s*SOURCE_NUMBERS_END\s*-->/,
-    );
-    if (sourceBlockMatch) {
+    const START_MARKER = '<!-- SOURCE_NUMBERS_START -->';
+    const END_MARKER = '<!-- SOURCE_NUMBERS_END -->';
+    const startIdx = rawResponse.indexOf(START_MARKER);
+    const endIdx = rawResponse.indexOf(END_MARKER);
+
+    if (startIdx === -1) {
+      console.warn('[enhance:source-numbers] no START marker in response', { reportId });
+      // rawResponse is used as-is
+    } else if (endIdx === -1) {
+      // Truncated response — Claude hit max_tokens before closing the JSON block.
+      // Strip everything from START to end of string so the HTML is clean.
+      console.warn('[enhance:source-numbers] truncated response — no END marker; stripping from START', { reportId });
+      rawResponse = rawResponse.slice(0, startIdx);
+    } else {
+      // Both markers present — parse JSON, then excise the block from the HTML.
+      const jsonBlock = rawResponse.slice(startIdx + START_MARKER.length, endIdx).trim();
       try {
-        const parsed = JSON.parse(sourceBlockMatch[1].trim());
+        const parsed = JSON.parse(jsonBlock);
         if (Array.isArray(parsed.numbers)) {
           sourceNumbers = parsed.numbers.filter(
             (n: any) => typeof n.value === 'number' && !isNaN(n.value),
           );
         }
       } catch (parseErr) {
-        console.warn('[validation] Failed to parse SOURCE_NUMBERS JSON:', parseErr);
+        console.warn('[enhance:source-numbers] failed to parse JSON block:', parseErr);
       }
-      // Strip the block (including any trailing whitespace/newlines) from the HTML
-      rawResponse = rawResponse.replace(
-        /\s*<!--\s*SOURCE_NUMBERS_START\s*-->[\s\S]*?<!--\s*SOURCE_NUMBERS_END\s*-->\s*/,
-        '',
+      rawResponse = (
+        rawResponse.slice(0, startIdx) +
+        rawResponse.slice(endIdx + END_MARKER.length)
       );
-    } else {
-      console.warn('[validation] SOURCE_NUMBERS block not found in response', { reportId });
     }
 
     const enhancedHtml = rawResponse.trim();
