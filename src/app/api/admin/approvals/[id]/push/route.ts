@@ -31,7 +31,7 @@ export async function POST(
   // ── Load + guard ───────────────────────────────────────────────────────────
   const { data: item } = await admin
     .from('action_items')
-    .select('id, status, clickup_task_id, title, description, resolved_user_id, proposed_due_date, priority')
+    .select('id, status, clickup_task_id, title, description, source_quote, tg_permalink, resolved_user_id, proposed_due_date, priority')
     .eq('id', id)
     .single();
 
@@ -58,6 +58,8 @@ export async function POST(
     const task = await createClickUpTask({
       name: item.title,
       description: item.description,
+      sourceQuote: item.source_quote,
+      tgPermalink: item.tg_permalink,
       assigneeId: item.resolved_user_id,
       priority: item.priority,
       dueDate: item.proposed_due_date,
