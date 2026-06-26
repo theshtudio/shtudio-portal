@@ -124,6 +124,69 @@ export interface ClientFile {
   created_at: string;
 }
 
+// ── Task intake / approval spine ──────────────────────────────────────────
+export type ActionItemSource = 'telegram' | 'fathom' | 'manual';
+export type ActionItemStatus =
+  | 'proposed'
+  | 'approved'
+  | 'edited'
+  | 'discarded'
+  | 'pushed'
+  | 'failed';
+export type ActionItemPriority = 'urgent' | 'high' | 'normal' | 'low';
+export type AliasKind = 'telegram' | 'transcript' | 'spoken';
+
+export interface ActionItem {
+  id: string;
+  source: ActionItemSource;
+
+  title: string;
+  description: string | null;
+  source_quote: string | null;
+
+  proposed_owner: string | null;
+  resolved_user_id: number | null;
+
+  due_hint: string | null;
+  proposed_due_date: string | null;
+
+  priority: ActionItemPriority | null;
+  confidence: number | null;
+
+  status: ActionItemStatus;
+  approved_by: string | null;
+  approved_at: string | null;
+
+  clickup_task_id: string | null;
+  push_error: string | null;
+
+  tg_chat_id: number | null;
+  tg_topic_id: number | null;
+  tg_message_id: number | null;
+  tg_permalink: string | null;
+  tg_sender: string | null;
+
+  meeting_id: string | null;
+
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TeamAlias {
+  id: string;
+  clickup_user_id: number;
+  canonical_name: string;
+  alias: string;
+  alias_kind: AliasKind;
+  created_at: string;
+}
+
+// One assignable team member, distilled from team_aliases for the gate dropdown.
+export interface AssigneeOption {
+  clickup_user_id: number;
+  canonical_name: string;
+}
+
 // Joined types for queries
 export interface ReportWithClient extends Report {
   clients: Pick<Client, 'id' | 'name' | 'slug'>;
