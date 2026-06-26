@@ -83,6 +83,50 @@ export function ApprovalsClient({ initialItems, assignees }: ApprovalsClientProp
     }
   }
 
+  // Approve then push, in sequence, on one click. Approve is its own request so
+  // it commits status='approved' (with the edited fields) BEFORE any ClickUp
+  // write is attempted — a push failure therefore leaves the row approved/failed
+  // and retryable rather than stuck at proposed. Reuses the existing
+  // approve (PATCH) and push (POST) endpoints unchanged.
+  async function approveAndPush(id: string, fields: Record<string, unknown>) {
+    setBusyId(id);
+    setError(null);
+    try {
+      const approveRes = await fetch(`/api/admin/approvals/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'approve', ...fields }),
+      });
+      if (!approveRes.ok) {
+        const data = await approveRes.json().catch(() => ({}));
+        setError({ id, message: data.error || `Approve failed (${approveRes.status})` });
+        return; // row stays proposed; nothing pushed
+      }
+
+      // Approval is committed. Now push; a failure here is non-fatal — the push
+      // route records status='failed' + push_error, and the row resurfaces with
+      // the existing "Retry push" button.
+      const pushRes = await fetch(`/api/admin/approvals/${id}/push`, { method: 'POST' });
+      if (!pushRes.ok) {
+        const data = await pushRes.json().catch(() => ({}));
+        setError({
+          id,
+          message: data.error
+            ? `Approved, but push failed: ${data.error} — use Retry push.`
+            : `Approved, but push failed (${pushRes.status}) — use Retry push.`,
+        });
+      }
+      router.refresh();
+    } catch {
+      // Approve may have committed before a network drop; refresh so the row
+      // reappears in its real (approved/failed) state with Retry push.
+      setError({ id, message: 'Network error during approve & push — check the row and use Retry push.' });
+      router.refresh();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   if (initialItems.length === 0) {
     return (
       <div className={styles.empty}>
@@ -219,12 +263,13 @@ export function ApprovalsClient({ initialItems, assignees }: ApprovalsClientProp
 
                 {item.status === 'proposed' && (
                   <Button
-                    variant="secondary"
+                    variant="primary"
                     size="sm"
+                    loading={busy}
                     disabled={busy || !d.title.trim()}
-                    onClick={() => send(item.id, { action: 'approve', ...draftFields(d) }, 'PATCH')}
+                    onClick={() => approveAndPush(item.id, draftFields(d))}
                   >
-                    Approve
+                    Approve &amp; push to ClickUp
                   </Button>
                 )}
 
