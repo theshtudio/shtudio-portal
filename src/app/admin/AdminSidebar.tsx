@@ -14,6 +14,7 @@ interface AdminSidebarProps {
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: '📊' },
   { href: '/admin/clients', label: 'Clients', icon: '👥' },
+  { href: '/admin/approvals', label: 'Approvals', icon: '✅' },
   { href: '/admin/reports/upload', label: 'Upload Report', icon: '📄' },
   { href: '/admin/knowledge-base', label: 'Knowledge Base', icon: '📚' },
   { href: '/admin/users', label: 'Team', icon: '🧑‍💼' },

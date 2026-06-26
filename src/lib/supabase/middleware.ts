@@ -32,7 +32,10 @@ export async function updateSession(request: NextRequest) {
   // /auth/set-password is reached from email invite links where the session is
   // delivered in the URL hash and only materialises in the browser, so the
   // server-side middleware can't see a cookie on first load.
-  const publicRoutes = ['/login', '/auth/callback', '/auth/set-password', '/share'];
+  // /api/telegram is called by Telegram's servers with no session cookie; it
+  // authenticates via the x-telegram-bot-api-secret-token header in the route
+  // itself, so it must bypass the login redirect (Telegram won't follow it).
+  const publicRoutes = ['/login', '/auth/callback', '/auth/set-password', '/share', '/api/telegram'];
   const isPublic = publicRoutes.some(r => pathname.startsWith(r));
 
   // Not logged in? Redirect to login (unless already on public route)
