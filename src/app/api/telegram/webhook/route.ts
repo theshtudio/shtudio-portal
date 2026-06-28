@@ -43,23 +43,30 @@ function buildPermalink(chatId: number, messageId: number, topicId?: number): st
     : `https://t.me/c/${internal}/${messageId}`;
 }
 
-async function confirmInChat(message: TgMessage, text: string) {
+/**
+ * Acknowledge the outcome by reacting to the original /task message with a
+ * single emoji, so the result is visible inline without a chat reply:
+ *   ✅ auto-pushed to ClickUp, 📝 queued for review, ⚠️ ClickUp push failed.
+ *
+ * Reacts to the command message itself (message.message_id), not the replied-to
+ * source. Best-effort: the row is already saved, so a failed reaction must
+ * never 500 the webhook (Telegram would then redeliver and duplicate the row).
+ */
+async function reactInChat(message: TgMessage, emoji: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token || !message.chat) return;
   try {
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    await fetch(`https://api.telegram.org/bot${token}/setMessageReaction`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chat_id: message.chat.id,
-        reply_to_message_id: message.message_id,
-        ...(message.message_thread_id ? { message_thread_id: message.message_thread_id } : {}),
-        text,
+        message_id: message.message_id,
+        reaction: [{ type: 'emoji', emoji }],
       }),
     });
   } catch (err) {
-    // The row is already saved; a failed confirmation must not 500 the webhook.
-    console.error('[telegram webhook] confirm reply failed', err);
+    console.error('[telegram webhook] reaction failed', err);
   }
 }
 
@@ -108,7 +115,6 @@ export async function POST(request: Request) {
 
   let proposedOwner: string | null = null;
   let resolvedUserId: number | null = null;
-  let resolvedName: string | null = null; // canonical name, for the auto-push reply
   let titleTokens = tokens;
 
   if (tokens.length) {
@@ -117,26 +123,24 @@ export async function POST(request: Request) {
       // @mention → telegram alias lookup
       const { data } = await supabase
         .from('team_aliases')
-        .select('clickup_user_id, canonical_name')
+        .select('clickup_user_id')
         .eq('alias_kind', 'telegram')
         .ilike('alias', lead)
         .maybeSingle();
       proposedOwner = lead;
       resolvedUserId = data?.clickup_user_id ?? null;
-      resolvedName = data?.canonical_name ?? null;
       titleTokens = tokens.slice(1);
     } else {
       // bare first name → spoken alias lookup (only consumed if it resolves)
       const { data } = await supabase
         .from('team_aliases')
-        .select('clickup_user_id, canonical_name')
+        .select('clickup_user_id')
         .eq('alias_kind', 'spoken')
         .ilike('alias', lead)
         .maybeSingle();
       if (data) {
         proposedOwner = lead;
         resolvedUserId = data.clickup_user_id;
-        resolvedName = data.canonical_name;
         titleTokens = tokens.slice(1);
       }
     }
@@ -193,11 +197,11 @@ export async function POST(request: Request) {
 
     const outcome = await pushActionItem(supabase, inserted.id);
     if (outcome.kind === 'pushed') {
-      await confirmInChat(message, `✓ Added to ClickUp, assigned to ${resolvedName ?? proposedOwner}`);
+      await reactInChat(message, '✅');
     } else {
       // ClickUp API error (or write-back failure): the row stays in the queue as
-      // 'failed' for a manual retry — report honestly rather than claiming success.
-      await confirmInChat(message, '⚠ Couldn’t add to ClickUp — queued for review');
+      // 'failed' for a manual retry — react honestly rather than claiming success.
+      await reactInChat(message, '⚠️');
     }
     return OK;
   }
@@ -211,11 +215,8 @@ export async function POST(request: Request) {
     return OK;
   }
 
-  // Reflect why it queued: a missing assignee is the common, actionable case.
-  const queueReason = resolvedUserId == null
-    ? '⚠ Queued for review — couldn’t resolve assignee'
-    : '✓ Queued for approval.';
-  await confirmInChat(message, queueReason);
+  // Queued for the approval gate (auto-push off, or didn't resolve cleanly).
+  await reactInChat(message, '📝');
 
   return OK;
 }
