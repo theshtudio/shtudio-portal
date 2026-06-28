@@ -54,19 +54,47 @@ function buildPermalink(chatId: number, messageId: number, topicId?: number): st
  */
 async function reactInChat(message: TgMessage, emoji: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  if (!token || !message.chat) return;
+  if (!token || !message.chat) {
+    // TEMP DIAGNOSTIC (#issue: silent reaction failure) — remove after debugging.
+    console.error('[telegram webhook] reactInChat skipped', {
+      hasToken: Boolean(token),
+      hasChat: Boolean(message.chat),
+    });
+    return;
+  }
+
+  // TEMP DIAGNOSTIC — log exactly what we're about to send so we can confirm the
+  // chat_id / message_id target the original /task message. Remove after debugging.
+  const payload = {
+    chat_id: message.chat.id,
+    message_id: message.message_id,
+    reaction: [{ type: 'emoji', emoji }],
+  };
+  console.log('[telegram webhook] setMessageReaction request', payload);
+
   try {
-    await fetch(`https://api.telegram.org/bot${token}/setMessageReaction`, {
+    const res = await fetch(`https://api.telegram.org/bot${token}/setMessageReaction`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: message.chat.id,
-        message_id: message.message_id,
-        reaction: [{ type: 'emoji', emoji }],
-      }),
+      body: JSON.stringify(payload),
     });
+
+    // TEMP DIAGNOSTIC — fetch only rejects on network errors, so a Telegram 4xx
+    // (REACTION_INVALID, bad message_id, etc.) lands here, not in catch. Capture
+    // the full status + body. Remove after debugging.
+    const bodyText = await res.text().catch(() => '<unreadable body>');
+    if (res.ok) {
+      console.log('[telegram webhook] setMessageReaction ok', { status: res.status, body: bodyText });
+    } else {
+      console.error('[telegram webhook] setMessageReaction FAILED', {
+        status: res.status,
+        statusText: res.statusText,
+        body: bodyText,
+      });
+    }
   } catch (err) {
-    console.error('[telegram webhook] reaction failed', err);
+    // Network-level failure only. Best-effort: never 500 the webhook.
+    console.error('[telegram webhook] reaction fetch threw', err);
   }
 }
 
