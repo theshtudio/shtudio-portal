@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
-import { createClickUpTask } from '@/lib/clickup';
+import { pushActionItem } from '@/lib/clickup-push';
 
 // The single irreversible external write. Guarded by the human approval gate
 // (status must be 'approved' or a prior 'failed') and idempotency on
@@ -28,66 +28,32 @@ export async function POST(
 
   const admin = createServiceSupabase();
 
-  // ── Load + guard ───────────────────────────────────────────────────────────
-  const { data: item } = await admin
-    .from('action_items')
-    .select('id, status, clickup_task_id, title, description, source_quote, tg_permalink, resolved_user_id, proposed_due_date, priority')
-    .eq('id', id)
-    .single();
+  // ── Load, guard, write to ClickUp (shared with the Telegram auto-push) ───────
+  const outcome = await pushActionItem(admin, id);
 
-  if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-
-  // Idempotency: a row that already reached ClickUp is never re-pushed.
-  if (item.clickup_task_id) {
-    return NextResponse.json(
-      { error: 'Already pushed', clickup_task_id: item.clickup_task_id },
-      { status: 409 },
-    );
-  }
-
-  // Only approved items (or a retry of a previously failed push) may be written.
-  if (item.status !== 'approved' && item.status !== 'failed') {
-    return NextResponse.json(
-      { error: `Cannot push from status '${item.status}'` },
-      { status: 409 },
-    );
-  }
-
-  // ── Write to ClickUp ───────────────────────────────────────────────────────
-  try {
-    const task = await createClickUpTask({
-      name: item.title,
-      description: item.description,
-      sourceQuote: item.source_quote,
-      tgPermalink: item.tg_permalink,
-      assigneeId: item.resolved_user_id,
-      priority: item.priority,
-      dueDate: item.proposed_due_date,
-    });
-
-    const { error } = await admin
-      .from('action_items')
-      .update({ clickup_task_id: task.id, status: 'pushed', push_error: null })
-      .eq('id', id);
-
-    if (error) {
-      // Task exists in ClickUp but we failed to record it — surface loudly so the
-      // operator doesn't blindly retry and create a duplicate.
-      console.error('[push] write-back failed after ClickUp create', error.message);
+  switch (outcome.kind) {
+    case 'pushed':
+      return NextResponse.json({ success: true, clickup_task_id: outcome.clickupTaskId });
+    case 'already_pushed':
       return NextResponse.json(
-        { error: `Task created in ClickUp (${task.id}) but write-back failed: ${error.message}` },
+        { error: 'Already pushed', clickup_task_id: outcome.clickupTaskId },
+        { status: 409 },
+      );
+    case 'not_found':
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    case 'bad_status':
+      return NextResponse.json(
+        { error: `Cannot push from status '${outcome.status}'` },
+        { status: 409 },
+      );
+    case 'writeback_failed':
+      return NextResponse.json(
+        {
+          error: `Task created in ClickUp (${outcome.clickupTaskId}) but write-back failed: ${outcome.error}`,
+        },
         { status: 500 },
       );
-    }
-
-    return NextResponse.json({ success: true, clickup_task_id: task.id });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error('[push] ClickUp create failed', message);
-    await admin
-      .from('action_items')
-      .update({ status: 'failed', push_error: message })
-      .eq('id', id);
-    return NextResponse.json({ error: message }, { status: 502 });
+    case 'clickup_failed':
+      return NextResponse.json({ error: outcome.error }, { status: 502 });
   }
 }
