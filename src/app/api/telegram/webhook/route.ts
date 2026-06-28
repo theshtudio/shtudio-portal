@@ -29,6 +29,17 @@ interface TgUpdate {
 // Always 200 for handled-but-ignored cases so Telegram doesn't retry the update.
 const OK = NextResponse.json({ ok: true });
 
+// Outcome → reaction emoji. setMessageReaction only accepts emoji from
+// Telegram's fixed ReactionTypeEmoji set; ✅ / 📝 / ⚠️ are NOT in it and were
+// rejected as REACTION_INVALID. These three are valid. The queued one is the
+// bare writing-hand code point '✍' — sending the ✍️ variation-selector
+// form (U+270D U+FE0F) would also be rejected.
+const REACTION = {
+  pushed: '🎉',
+  queued: '✍', // ✍ — explicit bare code point, no U+FE0F variation selector
+  failed: '🤬',
+} as const;
+
 /**
  * Best-effort permalink to the flagged message. Supergroup/forum chat ids are
  * prefixed with -100; t.me/c/<internal>/<message> expects that prefix stripped.
@@ -225,11 +236,11 @@ export async function POST(request: Request) {
 
     const outcome = await pushActionItem(supabase, inserted.id);
     if (outcome.kind === 'pushed') {
-      await reactInChat(message, '✅');
+      await reactInChat(message, REACTION.pushed);
     } else {
       // ClickUp API error (or write-back failure): the row stays in the queue as
       // 'failed' for a manual retry — react honestly rather than claiming success.
-      await reactInChat(message, '⚠️');
+      await reactInChat(message, REACTION.failed);
     }
     return OK;
   }
@@ -244,7 +255,7 @@ export async function POST(request: Request) {
   }
 
   // Queued for the approval gate (auto-push off, or didn't resolve cleanly).
-  await reactInChat(message, '📝');
+  await reactInChat(message, REACTION.queued);
 
   return OK;
 }
