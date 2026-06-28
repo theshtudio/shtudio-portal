@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServiceSupabase } from '@/lib/supabase/server';
+import { pushActionItem } from '@/lib/clickup-push';
 
 // Telegram delivers updates by POST; never cache this route.
 export const dynamic = 'force-dynamic';
@@ -42,7 +43,7 @@ function buildPermalink(chatId: number, messageId: number, topicId?: number): st
     : `https://t.me/c/${internal}/${messageId}`;
 }
 
-async function confirmInChat(message: TgMessage) {
+async function confirmInChat(message: TgMessage, text: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token || !message.chat) return;
   try {
@@ -53,7 +54,7 @@ async function confirmInChat(message: TgMessage) {
         chat_id: message.chat.id,
         reply_to_message_id: message.message_id,
         ...(message.message_thread_id ? { message_thread_id: message.message_thread_id } : {}),
-        text: '✓ Queued for approval.',
+        text,
       }),
     });
   } catch (err) {
@@ -107,6 +108,7 @@ export async function POST(request: Request) {
 
   let proposedOwner: string | null = null;
   let resolvedUserId: number | null = null;
+  let resolvedName: string | null = null; // canonical name, for the auto-push reply
   let titleTokens = tokens;
 
   if (tokens.length) {
@@ -115,24 +117,26 @@ export async function POST(request: Request) {
       // @mention → telegram alias lookup
       const { data } = await supabase
         .from('team_aliases')
-        .select('clickup_user_id')
+        .select('clickup_user_id, canonical_name')
         .eq('alias_kind', 'telegram')
         .ilike('alias', lead)
         .maybeSingle();
       proposedOwner = lead;
       resolvedUserId = data?.clickup_user_id ?? null;
+      resolvedName = data?.canonical_name ?? null;
       titleTokens = tokens.slice(1);
     } else {
       // bare first name → spoken alias lookup (only consumed if it resolves)
       const { data } = await supabase
         .from('team_aliases')
-        .select('clickup_user_id')
+        .select('clickup_user_id, canonical_name')
         .eq('alias_kind', 'spoken')
         .ilike('alias', lead)
         .maybeSingle();
       if (data) {
         proposedOwner = lead;
         resolvedUserId = data.clickup_user_id;
+        resolvedName = data.canonical_name;
         titleTokens = tokens.slice(1);
       }
     }
@@ -146,13 +150,13 @@ export async function POST(request: Request) {
   // was just "/task @someone" with no inline text.
   let title = titleTokens.join(' ').trim();
   if (!title && repliedText) title = repliedText.trim();
+  const hasTitle = title.length > 0; // a real title, before the placeholder kicks in
   if (!title) title = '(untitled task)';
   if (title.length > 500) title = title.slice(0, 500);
 
-  // 7. Insert one proposed row with full Telegram provenance.
-  const { error } = await supabase.from('action_items').insert({
-    source: 'telegram',
-    status: 'proposed',
+  // 7. Shared row fields, regardless of which path the row takes.
+  const row = {
+    source: 'telegram' as const,
     title,
     source_quote: sourceQuote,
     proposed_owner: proposedOwner,
@@ -162,7 +166,44 @@ export async function POST(request: Request) {
     tg_message_id: message.message_id,
     tg_permalink: buildPermalink(message.chat.id, message.message_id, message.message_thread_id),
     tg_sender: senderHandle,
-  });
+  };
+
+  // 8. Decide at insert time: auto-push a cleanly-resolved task straight to
+  // ClickUp, or queue it for manual review. A row resolves cleanly when it has
+  // both a real assignee and a real (non-placeholder) title.
+  const autoPushEnabled = process.env.TELEGRAM_AUTO_PUSH !== 'false'; // default on
+  const resolvesCleanly = resolvedUserId != null && hasTitle;
+
+  if (autoPushEnabled && resolvesCleanly) {
+    // Insert as 'approved' so the shared push helper's status gate accepts it,
+    // then push through the exact same path the portal button uses. The row is
+    // never left dangling: a ClickUp failure flips it to 'failed' (still in the
+    // queue) inside pushActionItem.
+    const { data: inserted, error: insertError } = await supabase
+      .from('action_items')
+      .insert({ ...row, status: 'approved', approved_at: new Date().toISOString() })
+      .select('id')
+      .single();
+
+    if (insertError || !inserted) {
+      console.error('[telegram webhook] auto-push insert failed', insertError?.message);
+      // 200 anyway: a 500 makes Telegram redeliver, which would duplicate the row.
+      return OK;
+    }
+
+    const outcome = await pushActionItem(supabase, inserted.id);
+    if (outcome.kind === 'pushed') {
+      await confirmInChat(message, `✓ Added to ClickUp, assigned to ${resolvedName ?? proposedOwner}`);
+    } else {
+      // ClickUp API error (or write-back failure): the row stays in the queue as
+      // 'failed' for a manual retry — report honestly rather than claiming success.
+      await confirmInChat(message, '⚠ Couldn’t add to ClickUp — queued for review');
+    }
+    return OK;
+  }
+
+  // 9. Otherwise queue it as 'proposed' for the approval gate, as before.
+  const { error } = await supabase.from('action_items').insert({ ...row, status: 'proposed' });
 
   if (error) {
     console.error('[telegram webhook] insert failed', error.message);
@@ -170,8 +211,11 @@ export async function POST(request: Request) {
     return OK;
   }
 
-  // 8. Confirm in-chat (non-blocking on failure).
-  await confirmInChat(message);
+  // Reflect why it queued: a missing assignee is the common, actionable case.
+  const queueReason = resolvedUserId == null
+    ? '⚠ Queued for review — couldn’t resolve assignee'
+    : '✓ Queued for approval.';
+  await confirmInChat(message, queueReason);
 
   return OK;
 }
