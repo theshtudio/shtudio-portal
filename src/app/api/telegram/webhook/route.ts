@@ -56,8 +56,8 @@ function buildPermalink(chatId: number, messageId: number, topicId?: number): st
 
 /**
  * Acknowledge the outcome by reacting to the original /task message with a
- * single emoji, so the result is visible inline without a chat reply:
- *   ✅ auto-pushed to ClickUp, 📝 queued for review, ⚠️ ClickUp push failed.
+ * single emoji (see REACTION), so the result is visible inline without a chat
+ * reply.
  *
  * Reacts to the command message itself (message.message_id), not the replied-to
  * source. Best-effort: the row is already saved, so a failed reaction must
@@ -65,47 +65,27 @@ function buildPermalink(chatId: number, messageId: number, topicId?: number): st
  */
 async function reactInChat(message: TgMessage, emoji: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  if (!token || !message.chat) {
-    // TEMP DIAGNOSTIC (#issue: silent reaction failure) — remove after debugging.
-    console.error('[telegram webhook] reactInChat skipped', {
-      hasToken: Boolean(token),
-      hasChat: Boolean(message.chat),
-    });
-    return;
-  }
-
-  // TEMP DIAGNOSTIC — log exactly what we're about to send so we can confirm the
-  // chat_id / message_id target the original /task message. Remove after debugging.
-  const payload = {
-    chat_id: message.chat.id,
-    message_id: message.message_id,
-    reaction: [{ type: 'emoji', emoji }],
-  };
-  console.log('[telegram webhook] setMessageReaction request', payload);
-
+  if (!token || !message.chat) return;
   try {
     const res = await fetch(`https://api.telegram.org/bot${token}/setMessageReaction`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        chat_id: message.chat.id,
+        message_id: message.message_id,
+        reaction: [{ type: 'emoji', emoji }],
+      }),
     });
-
-    // TEMP DIAGNOSTIC — fetch only rejects on network errors, so a Telegram 4xx
-    // (REACTION_INVALID, bad message_id, etc.) lands here, not in catch. Capture
-    // the full status + body. Remove after debugging.
-    const bodyText = await res.text().catch(() => '<unreadable body>');
-    if (res.ok) {
-      console.log('[telegram webhook] setMessageReaction ok', { status: res.status, body: bodyText });
-    } else {
-      console.error('[telegram webhook] setMessageReaction FAILED', {
-        status: res.status,
-        statusText: res.statusText,
-        body: bodyText,
-      });
+    // fetch only rejects on network errors; a Telegram 4xx (e.g. an emoji not in
+    // the supported set → REACTION_INVALID) resolves normally, so surface it
+    // explicitly rather than failing silently. Still best-effort.
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      console.error('[telegram webhook] setMessageReaction failed', res.status, body.slice(0, 300));
     }
   } catch (err) {
     // Network-level failure only. Best-effort: never 500 the webhook.
-    console.error('[telegram webhook] reaction fetch threw', err);
+    console.error('[telegram webhook] reaction failed', err);
   }
 }
 
