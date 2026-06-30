@@ -28,6 +28,8 @@ export interface Profile {
   can_delete_files: boolean;
   invited_by: string | null;
   invited_at: string | null;
+  status: 'pending' | 'active';
+  signin_method: 'google' | 'password';
   created_at: string;
   updated_at: string;
 }

@@ -13,8 +13,9 @@ interface UsersPageClientProps {
   currentUserId: string;
   isSuperAdmin: boolean;
   initialAdmins: Profile[];
-  pendingUserIds: string[];
 }
+
+type SigninMethod = 'google' | 'password';
 
 function formatDate(value: string | null): string {
   if (!value) return '—';
@@ -30,12 +31,10 @@ export function UsersPageClient({
   currentUserId,
   isSuperAdmin,
   initialAdmins,
-  pendingUserIds,
 }: UsersPageClientProps) {
   const router = useRouter();
   const [admins, setAdmins] = useState<Profile[]>(initialAdmins);
   const [showInvite, setShowInvite] = useState(false);
-  const pendingSet = new Set(pendingUserIds);
 
   useEffect(() => {
     setAdmins(initialAdmins);
@@ -43,6 +42,7 @@ export function UsersPageClient({
 
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
+  const [inviteMethod, setInviteMethod] = useState<SigninMethod>('google');
   const [inviteError, setInviteError] = useState('');
   const [inviteSuccess, setInviteSuccess] = useState('');
   const [inviting, setInviting] = useState(false);
@@ -136,14 +136,22 @@ export function UsersPageClient({
       const res = await fetch('/api/admin/users/invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: inviteEmail, full_name: inviteName }),
+        body: JSON.stringify({
+          email: inviteEmail,
+          full_name: inviteName,
+          method: inviteMethod,
+        }),
       });
       const json = await res.json();
       if (!res.ok) {
         setInviteError(json.error ?? 'Failed to send invite.');
         return;
       }
-      setInviteSuccess(`Invitation sent to ${inviteEmail}.`);
+      setInviteSuccess(
+        inviteMethod === 'google'
+          ? `${inviteName || inviteEmail} added. They can now sign in at the portal with Google.`
+          : `Invitation sent to ${inviteEmail}.`,
+      );
       setInviteEmail('');
       setInviteName('');
       router.refresh();
@@ -205,9 +213,36 @@ export function UsersPageClient({
               required
             />
           </div>
+          <fieldset className={styles.methodGroup}>
+            <legend className={styles.methodLegend}>Sign-in method</legend>
+            <label className={styles.methodOption}>
+              <input
+                type="radio"
+                name="signin_method"
+                value="google"
+                checked={inviteMethod === 'google'}
+                onChange={() => setInviteMethod('google')}
+              />
+              <span>
+                <strong>Google</strong> — no email sent; tell them to sign in with Google
+              </span>
+            </label>
+            <label className={styles.methodOption}>
+              <input
+                type="radio"
+                name="signin_method"
+                value="password"
+                checked={inviteMethod === 'password'}
+                onChange={() => setInviteMethod('password')}
+              />
+              <span>
+                <strong>Email / password</strong> — sends an invite email to set a password
+              </span>
+            </label>
+          </fieldset>
           <div className={styles.actions}>
             <Button type="submit" loading={inviting}>
-              Send Invite
+              {inviteMethod === 'google' ? 'Add user' : 'Send Invite'}
             </Button>
           </div>
         </form>
@@ -237,11 +272,17 @@ export function UsersPageClient({
             {admins.map((p) => {
               const isMe = p.email === currentUserEmail;
               const isSuper = p.email?.toLowerCase() === 'alex@shtud.io';
-              const isPending = pendingSet.has(p.id);
+              const isPending = p.status === 'pending';
+              const isGoogle = p.signin_method === 'google';
 
-              // Send Password Reset button is super-admin-only, hidden for
-              // self (super admin can use the regular forgot-password flow).
-              const showResetBtn = isSuperAdmin && !isMe;
+              // Resend Invite only applies to email/password invites — Google
+              // users were never sent an email.
+              const showResend = isPending && isSuperAdmin && !isGoogle;
+
+              // Send Password Reset is super-admin-only, hidden for self (super
+              // admin uses the regular forgot-password flow) and for Google
+              // accounts (they have no password to reset).
+              const showResetBtn = isSuperAdmin && !isMe && !isGoogle;
               const cooldownExpiry = resetCooldownUntil[p.id] ?? 0;
               const cooldownSecondsLeft = Math.max(
                 0,
@@ -283,7 +324,7 @@ export function UsersPageClient({
                       ) : (
                         <span className={styles.activeBadge}>Active</span>
                       )}
-                      {isPending && isSuperAdmin && (
+                      {showResend && (
                         <Button
                           type="button"
                           size="sm"
@@ -340,7 +381,7 @@ export function UsersPageClient({
           profile={manageProfile}
           isSelf={manageProfile.id === currentUserId}
           isTargetSuperAdmin={manageProfile.email?.toLowerCase() === 'alex@shtud.io'}
-          isPending={pendingSet.has(manageProfile.id)}
+          isPending={manageProfile.status === 'pending'}
           onClose={() => setManageId(null)}
           onUpdated={handleProfileUpdated}
           onDeleted={handleProfileDeleted}

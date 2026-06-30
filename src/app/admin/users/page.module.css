@@ -42,6 +42,39 @@
   gap: var(--space-2);
 }
 
+.methodGroup {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.methodLegend {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-dark-700);
+  padding: 0 var(--space-2);
+}
+
+.methodOption {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-dark-400);
+  cursor: pointer;
+}
+
+.methodOption input {
+  margin-top: 3px;
+}
+
+.methodOption strong {
+  color: var(--color-dark-700);
+}
+
 .error {
   background: #fee;
   color: #b00;

@@ -23,6 +23,13 @@ create table profiles (
   full_name text,
   role user_role not null default 'client',
   avatar_url text,
+  can_delete_files boolean not null default false,
+  invited_by uuid references profiles(id),
+  invited_at timestamptz,
+  -- Invite state: 'pending' until the user completes their first sign-in.
+  status text not null default 'active' check (status in ('pending', 'active')),
+  -- How the user authenticates: 'google' (OAuth, no password) or 'password'.
+  signin_method text not null default 'password' check (signin_method in ('google', 'password')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -274,16 +281,39 @@ create policy "audit_log_insert" on audit_log for insert with check (is_admin())
 -- When a new user signs up, auto-create their profile
 -- ============================================================
 
+-- Invite-only: a profile is created only for admin-invited users (metadata
+-- carries invited_by) or the super admin. Anyone else who reaches auth.users
+-- (e.g. a random Google OAuth sign-in) gets no profile, and /auth/callback
+-- rejects and deletes that orphaned auth user. See migration 20260630.
 create or replace function handle_new_user()
 returns trigger as $$
+declare
+  v_invited boolean := new.raw_user_meta_data ? 'invited_by';
+  v_is_super boolean := lower(new.email) = 'alex@shtud.io';
 begin
-  insert into public.profiles (id, email, full_name, role)
+  if not v_invited and not v_is_super then
+    return new;
+  end if;
+
+  insert into public.profiles (
+    id, email, full_name, role, can_delete_files,
+    invited_by, invited_at, status, signin_method
+  )
   values (
     new.id,
     new.email,
     coalesce(new.raw_user_meta_data->>'full_name', ''),
-    coalesce((new.raw_user_meta_data->>'role')::user_role, 'client')
-  );
+    coalesce((new.raw_user_meta_data->>'role')::user_role, 'client'),
+    coalesce((new.raw_user_meta_data->>'can_delete_files')::boolean, false),
+    nullif(new.raw_user_meta_data->>'invited_by', '')::uuid,
+    case when v_invited then now() else null end,
+    coalesce(
+      new.raw_user_meta_data->>'status',
+      case when v_is_super then 'active' else 'pending' end
+    ),
+    coalesce(new.raw_user_meta_data->>'signin_method', 'password')
+  )
+  on conflict (id) do nothing;
   return new;
 end;
 $$ language plpgsql security definer;
