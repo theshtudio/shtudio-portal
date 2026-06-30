@@ -38,6 +38,7 @@ export default async function UsersPage() {
   return (
     <UsersPageClient
       currentUserEmail={user.email ?? ''}
+      currentUserId={user.id}
       isSuperAdmin={isSuperAdmin(user.email)}
       initialAdmins={(admins ?? []) as Profile[]}
       pendingUserIds={Array.from(pendingUserIds)}
