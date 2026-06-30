@@ -19,6 +19,7 @@ interface TgMessage {
   from?: TgUser;
   chat?: { id: number; type?: string };
   text?: string;
+  caption?: string; // a /task sent with a photo carries the command here, not in text
   reply_to_message?: { text?: string; caption?: string };
 }
 
@@ -106,7 +107,10 @@ export async function POST(request: Request) {
   }
 
   const message = update.message;
-  const text = message?.text?.trim();
+  // On a photo (or other media) message the command rides in caption, not text;
+  // fall back so a /task with an attachment isn't dropped at the entry gate. We
+  // ignore the attachment itself — only the command text is processed.
+  const text = (message?.text ?? message?.caption)?.trim();
   if (!message || !text || !message.from || !message.chat) return OK;
 
   // 3. Only act on /task commands (also tolerate /task@botname).
