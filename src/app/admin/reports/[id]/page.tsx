@@ -140,7 +140,7 @@ export default async function ReportDetailPage({
           <div className={styles.metaCard}>
             <div className={styles.metaLabel}>Report Period</div>
             <div className={styles.metaValue}>
-              {format(new Date(report.period_start), 'MMM yyyy')} &mdash; {format(new Date(report.period_end), 'MMM yyyy')}
+              {format(new Date(report.period_start), 'd MMM yyyy')} &mdash; {format(new Date(report.period_end), 'd MMM yyyy')}
             </div>
           </div>
         )}
@@ -160,6 +160,7 @@ export default async function ReportDetailPage({
         initialClientId={client?.id ?? ''}
         initialReportType={report.report_type ?? null}
         allClients={allClients ?? []}
+        aiStatus={report.ai_status as any}
       />
 
       {/* Custom Instructions */}

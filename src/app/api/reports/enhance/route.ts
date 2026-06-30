@@ -6,6 +6,7 @@ import { sendReportCompletedEmail } from '@/lib/email';
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import mammoth from 'mammoth';
+import { extractPeriodFromPdf, type ExtractedPeriod } from '@/lib/periodExtraction';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -255,6 +256,34 @@ async function processReport(reportId: string, report: any) {
         .update({ ai_status: 'failed', ai_error: 'Failed to download report files from storage' })
         .eq('id', reportId);
       return;
+    }
+
+    // ── Deterministic period-date extraction from the source PDF ──
+    // Read the first two pages of the first PDF and regex out an explicit date
+    // range from the header. This is preferred over Claude's PERIOD_START line
+    // because it's deterministic. Non-fatal: any failure leaves it as 'none'
+    // and we fall back to Claude's extraction below.
+    let regexPeriod: ExtractedPeriod = { periodStart: null, periodEnd: null, confidence: 'none' };
+    try {
+      const firstPdfPath = storagePaths.find((p) => p.toLowerCase().endsWith('.pdf'));
+      if (firstPdfPath) {
+        const { data: pdfData, error: pdfErr } = await supabase.storage
+          .from('report-pdfs')
+          .download(firstPdfPath);
+        if (pdfErr || !pdfData) {
+          console.warn('[enhance:period] could not download PDF for extraction:', pdfErr?.message);
+        } else {
+          const pdfBuffer = Buffer.from(await pdfData.arrayBuffer());
+          regexPeriod = await extractPeriodFromPdf(pdfBuffer);
+          console.log('[enhance:period] regex extraction', {
+            reportId,
+            path: firstPdfPath,
+            ...regexPeriod,
+          });
+        }
+      }
+    } catch (periodErr) {
+      console.error('[enhance:period] extraction failed (non-fatal):', periodErr);
     }
 
     // Download ALL client files for this client as context
@@ -1790,6 +1819,26 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
 
     const enhancedHtml = rawResponse.trim();
 
+    // ── Resolve final period dates ──
+    // Prefer deterministic regex extraction from the PDF header; fall back to
+    // Claude's PERIOD_START/PERIOD_END line. Crucially, NEVER overwrite a date
+    // that's already set on the report — those were either entered/edited by an
+    // admin or pre-filled at upload, and must survive a "Save & Re-process".
+    const finalPeriodStart = regexPeriod.periodStart ?? extractedPeriodStart;
+    const finalPeriodEnd = regexPeriod.periodEnd ?? extractedPeriodEnd;
+    const periodUpdates: { period_start?: string; period_end?: string } = {};
+    if (!report.period_start && finalPeriodStart) periodUpdates.period_start = finalPeriodStart;
+    if (!report.period_end && finalPeriodEnd) periodUpdates.period_end = finalPeriodEnd;
+    console.log('[enhance:period] resolved', {
+      reportId,
+      existingStart: report.period_start ?? null,
+      existingEnd: report.period_end ?? null,
+      regexConfidence: regexPeriod.confidence,
+      claudeStart: extractedPeriodStart,
+      claudeEnd: extractedPeriodEnd,
+      applied: periodUpdates,
+    });
+
     // Save enhanced HTML, mismatch info, extracted dates, and mark as completed
     await supabase
       .from('reports')
@@ -1799,8 +1848,7 @@ ${report.custom_instructions}` : ''}${historicalContext}`;
         ai_error: null,
         detected_client_name: mismatchDescription,
         client_mismatch: clientMismatch,
-        ...(extractedPeriodStart ? { period_start: extractedPeriodStart } : {}),
-        ...(extractedPeriodEnd ? { period_end: extractedPeriodEnd } : {}),
+        ...periodUpdates,
       })
       .eq('id', reportId);
 
