@@ -91,28 +91,8 @@ export async function POST(request: NextRequest) {
     newUserId = data.user?.id;
   }
 
-  // Defensive backfill: the handle_new_user() trigger should have created the
-  // profile row from the metadata above, but if the trigger didn't run or used
-  // the default role we upsert the canonical values here so the team list shows
-  // the new user straight away.
-  if (newUserId) {
-    await adminSupabase
-      .from('profiles')
-      .upsert(
-        {
-          id: newUserId,
-          email,
-          full_name: fullName,
-          role: 'admin',
-          can_delete_files: false,
-          invited_by: user.id,
-          invited_at: new Date().toISOString(),
-          status: 'pending',
-          signin_method: method,
-        },
-        { onConflict: 'id' },
-      );
-  }
-
+  // The handle_new_user() trigger creates the profile row from the user_metadata
+  // above (role, can_delete_files, invited_by, invited_at, status, signin_method),
+  // so no explicit profiles insert is needed here.
   return NextResponse.json({ user: { id: newUserId, email }, method });
 }
