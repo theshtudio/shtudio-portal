@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { format, parseISO } from 'date-fns';
 import { REPORT_TYPES } from '@/lib/reportTypeConfig';
-import type { Client } from '@/lib/types';
+import type { Client, ReportAiStatus } from '@/lib/types';
 import styles from './page.module.css';
 
 interface ReportDetailsCardProps {
@@ -13,26 +14,20 @@ interface ReportDetailsCardProps {
   initialClientId: string;
   initialReportType: string | null;
   allClients: Pick<Client, 'id' | 'name'>[];
+  aiStatus: ReportAiStatus;
 }
 
-// Convert ISO date string (YYYY-MM-DD or YYYY-MM-DDTHH...) to YYYY-MM for <input type="month">
-function toMonthValue(iso: string | null): string {
+// Convert an ISO date string (YYYY-MM-DD or YYYY-MM-DDTHH...) to the YYYY-MM-DD
+// value that <input type="date"> expects.
+function toDateValue(iso: string | null): string {
   if (!iso) return '';
-  return iso.slice(0, 7);
+  return iso.slice(0, 10);
 }
 
-// Convert YYYY-MM to first-of-month ISO string
-function fromMonthValue(val: string): string | null {
-  if (!val) return null;
-  return `${val}-01`;
-}
-
-// Format YYYY-MM as "Month YYYY" for display
-function formatMonthDisplay(val: string): string {
-  if (!val) return '—';
-  const [year, month] = val.split('-');
-  const d = new Date(parseInt(year), parseInt(month) - 1, 1);
-  return d.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
+// Format a YYYY-MM-DD value as "5 May 2026" for read-only display.
+function formatDateDisplay(val: string): string {
+  if (!val) return '';
+  return format(parseISO(val), 'd MMM yyyy');
 }
 
 export function ReportDetailsCard({
@@ -42,20 +37,28 @@ export function ReportDetailsCard({
   initialClientId,
   initialReportType,
   allClients,
+  aiStatus,
 }: ReportDetailsCardProps) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(false);
 
-  const [periodStart, setPeriodStart] = useState(toMonthValue(initialPeriodStart));
-  const [periodEnd, setPeriodEnd] = useState(toMonthValue(initialPeriodEnd));
+  const [periodStart, setPeriodStart] = useState(toDateValue(initialPeriodStart));
+  const [periodEnd, setPeriodEnd] = useState(toDateValue(initialPeriodEnd));
   const [clientId, setClientId] = useState(initialClientId);
   const [reportType, setReportType] = useState(initialReportType ?? '');
 
+  // Show the "couldn't extract" hint once processing has settled and no period
+  // dates ended up on the report — a prompt to fill them in manually.
+  const showExtractionHint =
+    !periodStart &&
+    !periodEnd &&
+    (aiStatus === 'completed' || aiStatus === 'failed');
+
   function handleCancel() {
-    setPeriodStart(toMonthValue(initialPeriodStart));
-    setPeriodEnd(toMonthValue(initialPeriodEnd));
+    setPeriodStart(toDateValue(initialPeriodStart));
+    setPeriodEnd(toDateValue(initialPeriodEnd));
     setClientId(initialClientId);
     setReportType(initialReportType ?? '');
     setEditing(false);
@@ -67,8 +70,8 @@ export function ReportDetailsCard({
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        period_start: fromMonthValue(periodStart),
-        period_end: fromMonthValue(periodEnd),
+        period_start: periodStart || null,
+        period_end: periodEnd || null,
         client_id: clientId || undefined,
         report_type: reportType || null,
       }),
@@ -102,7 +105,7 @@ export function ReportDetailsCard({
               <div className={styles.detailsField}>
                 <label className={styles.detailsLabel}>Period Start</label>
                 <input
-                  type="month"
+                  type="date"
                   className={styles.detailsInput}
                   value={periodStart}
                   onChange={(e) => setPeriodStart(e.target.value)}
@@ -111,7 +114,7 @@ export function ReportDetailsCard({
               <div className={styles.detailsField}>
                 <label className={styles.detailsLabel}>Period End</label>
                 <input
-                  type="month"
+                  type="date"
                   className={styles.detailsInput}
                   value={periodEnd}
                   onChange={(e) => setPeriodEnd(e.target.value)}
@@ -160,11 +163,19 @@ export function ReportDetailsCard({
           <div className={styles.detailsFieldGrid}>
             <div className={styles.detailsField}>
               <div className={styles.detailsLabel}>Period Start</div>
-              <div className={styles.detailsValue}>{formatMonthDisplay(periodStart)}</div>
+              {periodStart ? (
+                <div className={styles.detailsValue}>{formatDateDisplay(periodStart)}</div>
+              ) : (
+                <div className={styles.detailsValuePlaceholder}>Select period start</div>
+              )}
             </div>
             <div className={styles.detailsField}>
               <div className={styles.detailsLabel}>Period End</div>
-              <div className={styles.detailsValue}>{formatMonthDisplay(periodEnd)}</div>
+              {periodEnd ? (
+                <div className={styles.detailsValue}>{formatDateDisplay(periodEnd)}</div>
+              ) : (
+                <div className={styles.detailsValuePlaceholder}>Select period end</div>
+              )}
             </div>
             <div className={styles.detailsField}>
               <div className={styles.detailsLabel}>Client</div>
@@ -174,6 +185,12 @@ export function ReportDetailsCard({
               <div className={styles.detailsLabel}>Report Type</div>
               <div className={styles.detailsValue}>{currentReportType}</div>
             </div>
+          </div>
+        )}
+
+        {showExtractionHint && (
+          <div className={styles.detailsHint}>
+            Period dates could not be extracted — please enter manually.
           </div>
         )}
       </div>

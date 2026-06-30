@@ -1,6 +1,7 @@
 import { createServerSupabase } from '@/lib/supabase/server';
 import { format } from 'date-fns';
 import Link from 'next/link';
+import { ReportHtml } from '@/components/ReportHtml/ReportHtml';
 import styles from './page.module.css';
 
 export default async function ClientReportPage({
@@ -14,7 +15,7 @@ export default async function ClientReportPage({
   // RLS ensures clients can only see published reports for their client
   const { data: report } = await supabase
     .from('reports')
-    .select('id, title, period_start, period_end, ai_enhanced_html, published_at, created_at')
+    .select('id, title, period_start, period_end, ai_enhanced_html, blocks, published_at, created_at')
     .eq('id', id)
     .eq('is_published', true)
     .single();
@@ -46,9 +47,10 @@ export default async function ClientReportPage({
         </div>
       </div>
 
-      <div
+      <ReportHtml
         className={styles.reportContent}
-        dangerouslySetInnerHTML={{ __html: report.ai_enhanced_html }}
+        html={report.ai_enhanced_html}
+        blocks={report.blocks ?? null}
       />
 
       <div className={styles.footer}>

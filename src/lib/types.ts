@@ -1,6 +1,24 @@
 export type UserRole = 'admin' | 'client';
 export type ReportAiStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
+export interface BlocksOverride {
+  html: string;
+}
+
+// Per-report layout customisation. Populated from reports.blocks (JSONB,
+// nullable). Null means "render AI output in document order, no overrides".
+//
+// `shown` is the opt-in marker for blocks emitted with
+// data-default-hidden="true" (e.g. internal-only notes). Without an entry
+// in `shown`, default-hidden blocks are stripped from client views; with
+// one, they render through. `hidden` always wins over `shown`.
+export interface BlocksConfig {
+  order?: string[];
+  hidden?: string[];
+  shown?: string[];
+  overrides?: Record<string, BlocksOverride>;
+}
+
 export interface Profile {
   id: string;
   email: string;
@@ -58,6 +76,8 @@ export interface Report {
   is_published: boolean;
   published_at: string | null;
   created_by: string | null;
+  blocks: BlocksConfig | null;
+  blocks_draft: BlocksConfig | null;
   created_at: string;
   updated_at: string;
 }
@@ -102,6 +122,69 @@ export interface ClientFile {
   file_type: string | null;
   file_size: number | null;
   created_at: string;
+}
+
+// ── Task intake / approval spine ──────────────────────────────────────────
+export type ActionItemSource = 'telegram' | 'fathom' | 'manual';
+export type ActionItemStatus =
+  | 'proposed'
+  | 'approved'
+  | 'edited'
+  | 'discarded'
+  | 'pushed'
+  | 'failed';
+export type ActionItemPriority = 'urgent' | 'high' | 'normal' | 'low';
+export type AliasKind = 'telegram' | 'transcript' | 'spoken';
+
+export interface ActionItem {
+  id: string;
+  source: ActionItemSource;
+
+  title: string;
+  description: string | null;
+  source_quote: string | null;
+
+  proposed_owner: string | null;
+  resolved_user_id: number | null;
+
+  due_hint: string | null;
+  proposed_due_date: string | null;
+
+  priority: ActionItemPriority | null;
+  confidence: number | null;
+
+  status: ActionItemStatus;
+  approved_by: string | null;
+  approved_at: string | null;
+
+  clickup_task_id: string | null;
+  push_error: string | null;
+
+  tg_chat_id: number | null;
+  tg_topic_id: number | null;
+  tg_message_id: number | null;
+  tg_permalink: string | null;
+  tg_sender: string | null;
+
+  meeting_id: string | null;
+
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TeamAlias {
+  id: string;
+  clickup_user_id: number;
+  canonical_name: string;
+  alias: string;
+  alias_kind: AliasKind;
+  created_at: string;
+}
+
+// One assignable team member, distilled from team_aliases for the gate dropdown.
+export interface AssigneeOption {
+  clickup_user_id: number;
+  canonical_name: string;
 }
 
 // Joined types for queries

@@ -10,15 +10,27 @@ import { ClientMismatchBanner } from './ClientMismatchBanner';
 import { ProcessingProgress } from './ProcessingProgress';
 import { EditableTitle } from './EditableTitle';
 import { ReportDetailsCard } from './ReportDetailsCard';
+import { ReportHtml } from '@/components/ReportHtml/ReportHtml';
 import type { ReportCommentWithAuthor } from '@/lib/types';
+import { ValidationWarnings } from './ValidationWarnings';
 import styles from './page.module.css';
 
 export default async function ReportDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
+  const sp = await searchParams;
+  // ?raw=1 bypasses any saved block customisations so admins can see the
+  // unmodified AI output for debugging. Default is the customised view.
+  const rawMode = sp.raw === '1';
+  // ?preview=published forces the published block config (what clients see)
+  // even when there's an unpublished draft saved. Useful for verifying the
+  // "live" state without leaving the admin context.
+  const previewPublished = sp.preview === 'published';
   const supabase = await createServerSupabase();
 
   const { data: report } = await supabase
@@ -40,6 +52,13 @@ export default async function ReportDetailPage({
     .select('id, name')
     .eq('is_active', true)
     .order('name');
+
+  // Fetch validation warnings for this report
+  const { data: validationWarnings } = await serviceSupabase
+    .from('report_validation_warnings')
+    .select('id, warning_type, details, created_at')
+    .eq('report_id', id)
+    .order('created_at', { ascending: false });
 
   // Fetch comments (using service role to bypass RLS for admin view)
   const { data: comments } = await serviceSupabase
@@ -71,6 +90,11 @@ export default async function ReportDetailPage({
         </div>
         <div className={styles.headerActions}>
           <StatusBadge status={report.ai_status as any} />
+          {report.ai_status === 'completed' && report.ai_enhanced_html && (
+            <Link href={`/admin/reports/${report.id}/edit`} className={styles.editLayoutBtn}>
+              Edit Layout
+            </Link>
+          )}
           <ReportActions report={report} clientId={client?.id} showDelete />
         </div>
       </div>
@@ -116,7 +140,7 @@ export default async function ReportDetailPage({
           <div className={styles.metaCard}>
             <div className={styles.metaLabel}>Report Period</div>
             <div className={styles.metaValue}>
-              {format(new Date(report.period_start), 'MMM yyyy')} &mdash; {format(new Date(report.period_end), 'MMM yyyy')}
+              {format(new Date(report.period_start), 'd MMM yyyy')} &mdash; {format(new Date(report.period_end), 'd MMM yyyy')}
             </div>
           </div>
         )}
@@ -136,18 +160,35 @@ export default async function ReportDetailPage({
         initialClientId={client?.id ?? ''}
         initialReportType={report.report_type ?? null}
         allClients={allClients ?? []}
+        aiStatus={report.ai_status as any}
       />
 
       {/* Custom Instructions */}
       <CustomInstructions reportId={report.id} initialValue={report.custom_instructions || ''} />
 
+      {validationWarnings && validationWarnings.length > 0 && (
+        <ValidationWarnings warnings={validationWarnings as any} />
+      )}
+
       <div className={styles.previewSection}>
         <h2 className={styles.sectionTitle}>Report Preview</h2>
 
         {report.ai_status === 'completed' && report.ai_enhanced_html ? (
-          <div
+          <ReportHtml
             className={styles.htmlPreview}
-            dangerouslySetInnerHTML={{ __html: report.ai_enhanced_html }}
+            html={report.ai_enhanced_html}
+            blocks={
+              rawMode
+                ? null
+                : previewPublished
+                  ? (report.blocks ?? null)
+                  : (report.blocks_draft ?? report.blocks ?? null)
+            }
+            // Default admin preview shows internal-only blocks so admins
+            // can see what's there. ?preview=published acts like a client
+            // view, ?raw=1 shows everything (effectively the same as not
+            // respecting default-hidden — both intend "show me everything").
+            respectDefaultHidden={previewPublished}
           />
         ) : report.ai_status === 'processing' ? (
           <ProcessingProgress reportId={report.id} />

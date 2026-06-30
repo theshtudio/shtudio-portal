@@ -22,6 +22,14 @@ export async function POST(
   }
 
   const { id } = await params;
+
+  if (id === user.id) {
+    return NextResponse.json(
+      { error: 'Use the regular forgot-password flow for your own account.' },
+      { status: 400 },
+    );
+  }
+
   const adminSupabase = createServiceSupabase();
 
   const { data: target, error: lookupError } = await adminSupabase
@@ -38,6 +46,9 @@ export async function POST(
     process.env.NEXT_PUBLIC_SITE_URL ?? 'https://portal.shtudio.com.au';
   const redirectTo = `${baseUrl.replace(/\/$/, '')}/auth/set-password`;
 
+  // generateLink does NOT send an email by itself — it just returns the
+  // recovery link. We email it via Resend so we control the template
+  // (and don't depend on Supabase's auth-email SMTP config).
   const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({
     type: 'recovery',
     email: target.email,

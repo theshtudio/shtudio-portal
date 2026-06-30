@@ -48,8 +48,59 @@ export function UsersPageClient({
   const [inviting, setInviting] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [resentId, setResentId] = useState<string | null>(null);
+  const [resettingId, setResettingId] = useState<string | null>(null);
+  // Map of user id → unix ms when the 30s spam guard expires
+  const [resetCooldownUntil, setResetCooldownUntil] = useState<Record<string, number>>({});
+  const [resetSentId, setResetSentId] = useState<string | null>(null);
+  const [resetError, setResetError] = useState<{ id: string; message: string } | null>(null);
   const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
   const [manageId, setManageId] = useState<string | null>(null);
+
+  // Tick once a second while any cooldown is active so disabled buttons
+  // re-enable themselves at the right moment.
+  const [, setNow] = useState(0);
+  useEffect(() => {
+    const anyActive = Object.values(resetCooldownUntil).some((t) => t > Date.now());
+    if (!anyActive) return;
+    const interval = setInterval(() => setNow((n) => n + 1), 1000);
+    return () => clearInterval(interval);
+  }, [resetCooldownUntil]);
+
+  async function handleSendPasswordReset(profile: Profile) {
+    setResetError(null);
+    setResetSentId(null);
+    setResettingId(profile.id);
+    try {
+      const res = await fetch(`/api/admin/users/${profile.id}/send-password-reset`, {
+        method: 'POST',
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setResetError({
+          id: profile.id,
+          message: json.error ?? 'Failed to send password reset.',
+        });
+        return;
+      }
+      setResetSentId(profile.id);
+      // 30-second spam guard
+      setResetCooldownUntil((prev) => ({
+        ...prev,
+        [profile.id]: Date.now() + 30_000,
+      }));
+      // Clear the "✓ Sent" pill after 3s; cooldown timer continues
+      setTimeout(() => {
+        setResetSentId((id) => (id === profile.id ? null : id));
+      }, 3000);
+    } catch (err) {
+      setResetError({
+        id: profile.id,
+        message: err instanceof Error ? err.message : 'Failed to send password reset.',
+      });
+    } finally {
+      setResettingId(null);
+    }
+  }
 
   async function handleResend(profile: Profile) {
     setRowError(null);
@@ -187,6 +238,26 @@ export function UsersPageClient({
               const isMe = p.email === currentUserEmail;
               const isSuper = p.email?.toLowerCase() === 'alex@shtud.io';
               const isPending = pendingSet.has(p.id);
+
+              // Send Password Reset button is super-admin-only, hidden for
+              // self (super admin can use the regular forgot-password flow).
+              const showResetBtn = isSuperAdmin && !isMe;
+              const cooldownExpiry = resetCooldownUntil[p.id] ?? 0;
+              const cooldownSecondsLeft = Math.max(
+                0,
+                Math.ceil((cooldownExpiry - Date.now()) / 1000),
+              );
+              const resetDisabled =
+                resettingId === p.id || cooldownSecondsLeft > 0;
+              const resetLabel =
+                resettingId === p.id
+                  ? 'Sending…'
+                  : resetSentId === p.id
+                    ? '✓ Sent'
+                    : cooldownSecondsLeft > 0
+                      ? `Wait ${cooldownSecondsLeft}s`
+                      : 'Send Password Reset';
+
               return (
                 <tr key={p.id}>
                   <td>
@@ -206,29 +277,44 @@ export function UsersPageClient({
                       : 'Limited (cannot delete files)'}
                   </td>
                   <td>
-                    {isPending ? (
-                      <div className={styles.statusCell}>
+                    <div className={styles.statusCell}>
+                      {isPending ? (
                         <span className={styles.pendingBadge}>Pending</span>
-                        {isSuperAdmin && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            loading={resendingId === p.id}
-                            onClick={() => handleResend(p)}
-                          >
-                            Resend Invite
-                          </Button>
-                        )}
-                        {resentId === p.id && (
-                          <span className={styles.resentNote}>Sent ✓</span>
-                        )}
-                      </div>
-                    ) : (
-                      <span className={styles.activeBadge}>Active</span>
-                    )}
-                    {rowError?.id === p.id && (
+                      ) : (
+                        <span className={styles.activeBadge}>Active</span>
+                      )}
+                      {isPending && isSuperAdmin && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          loading={resendingId === p.id}
+                          onClick={() => handleResend(p)}
+                        >
+                          Resend Invite
+                        </Button>
+                      )}
+                      {isPending && resentId === p.id && (
+                        <span className={styles.resentNote}>Sent ✓</span>
+                      )}
+                      {showResetBtn && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          loading={resettingId === p.id}
+                          disabled={resetDisabled}
+                          onClick={() => handleSendPasswordReset(p)}
+                        >
+                          {resetLabel}
+                        </Button>
+                      )}
+                    </div>
+                    {rowError?.id === p.id && !isSuperAdmin && (
                       <div className={styles.rowError}>{rowError.message}</div>
+                    )}
+                    {resetError?.id === p.id && (
+                      <div className={styles.rowError}>{resetError.message}</div>
                     )}
                   </td>
                   {isSuperAdmin && (
