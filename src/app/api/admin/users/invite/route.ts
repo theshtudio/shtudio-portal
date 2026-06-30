@@ -20,6 +20,9 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
   const fullName = typeof body.full_name === 'string' ? body.full_name.trim() : '';
+  // Sign-in method: 'google' (default) creates a password-less account that
+  // signs in via OAuth; 'password' keeps the existing email-invite flow.
+  const method = body.method === 'password' ? 'password' : 'google';
 
   if (!email || !email.includes('@')) {
     return NextResponse.json({ error: 'A valid email address is required.' }, { status: 400 });
@@ -43,47 +46,73 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Send invited users straight to /auth/set-password. The Supabase invite link
-  // uses the implicit (hash-token) flow, so /auth/callback (which expects a ?code
-  // query param) cannot consume it and ends up rendering blank or erroring.
-  const baseUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ?? 'https://portal.shtudio.com.au';
-  const redirectTo = `${baseUrl.replace(/\/$/, '')}/auth/set-password`;
+  // Metadata the handle_new_user() trigger reads to build the profile row.
+  const metadata = {
+    full_name: fullName,
+    role: 'admin',
+    can_delete_files: false,
+    invited_by: user.id,
+    status: 'pending',
+    signin_method: method,
+  };
 
-  const { data, error } = await adminSupabase.auth.admin.inviteUserByEmail(email, {
-    data: {
-      full_name: fullName,
-      role: 'admin',
-      can_delete_files: false,
-      invited_by: user.id,
-    },
-    redirectTo,
-  });
+  let newUserId: string | undefined;
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  if (method === 'google') {
+    // Invite-first Google: create a confirmed, password-less account so the
+    // user can sign in with Google immediately (Supabase links the Google
+    // identity to this same user by matching the confirmed email). No email is
+    // sent — the admin tells the user verbally.
+    const { data, error } = await adminSupabase.auth.admin.createUser({
+      email,
+      email_confirm: true,
+      user_metadata: metadata,
+    });
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    newUserId = data.user?.id;
+  } else {
+    // Send email-invited users straight to /auth/set-password. The Supabase
+    // invite link uses the implicit (hash-token) flow, so /auth/callback (which
+    // expects a ?code query param) cannot consume it and ends up rendering blank
+    // or erroring.
+    const baseUrl =
+      process.env.NEXT_PUBLIC_SITE_URL ?? 'https://portal.shtudio.com.au';
+    const redirectTo = `${baseUrl.replace(/\/$/, '')}/auth/set-password`;
+
+    const { data, error } = await adminSupabase.auth.admin.inviteUserByEmail(email, {
+      data: metadata,
+      redirectTo,
+    });
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    newUserId = data.user?.id;
   }
 
   // Defensive backfill: the handle_new_user() trigger should have created the
-  // profile row with role='admin' and can_delete_files=false from the metadata
-  // above, but if the trigger didn't run or used the default role we upsert
-  // the canonical values here so the team list shows the new admin straight away.
-  if (data.user) {
+  // profile row from the metadata above, but if the trigger didn't run or used
+  // the default role we upsert the canonical values here so the team list shows
+  // the new user straight away.
+  if (newUserId) {
     await adminSupabase
       .from('profiles')
       .upsert(
         {
-          id: data.user.id,
+          id: newUserId,
           email,
           full_name: fullName,
           role: 'admin',
           can_delete_files: false,
           invited_by: user.id,
           invited_at: new Date().toISOString(),
+          status: 'pending',
+          signin_method: method,
         },
         { onConflict: 'id' },
       );
   }
 
-  return NextResponse.json({ user: data.user });
+  return NextResponse.json({ user: { id: newUserId, email }, method });
 }

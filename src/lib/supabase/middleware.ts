@@ -62,9 +62,20 @@ export async function updateSession(request: NextRequest) {
   if (user && (pathname.startsWith('/admin') || pathname.startsWith('/dashboard'))) {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, status')
       .eq('id', user.id)
       .single();
+
+    // Promote the invite to active on first authenticated load. The OAuth
+    // callback already does this for Google sign-ins; this covers email/password
+    // users, who reach the app via /auth/set-password instead. One-time: once
+    // active, the condition never fires again.
+    if (profile?.status === 'pending') {
+      await supabase
+        .from('profiles')
+        .update({ status: 'active', updated_at: new Date().toISOString() })
+        .eq('id', user.id);
+    }
 
     if (profile) {
       // Admins trying to access /dashboard → /admin

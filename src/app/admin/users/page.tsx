@@ -19,29 +19,20 @@ export default async function UsersPage() {
   if (!profile || profile.role !== 'admin') redirect('/dashboard');
 
   const adminSupabase = createServiceSupabase();
-  const [{ data: admins }, authList] = await Promise.all([
-    adminSupabase
-      .from('profiles')
-      .select('*')
-      .eq('role', 'admin')
-      .order('created_at', { ascending: true }),
-    adminSupabase.auth.admin.listUsers({ perPage: 1000 }),
-  ]);
+  const { data: admins } = await adminSupabase
+    .from('profiles')
+    .select('*')
+    .eq('role', 'admin')
+    .order('created_at', { ascending: true });
 
-  // A user is "pending" (invite never completed) if they exist in auth.users
-  // but have never signed in.
-  const pendingUserIds = new Set<string>();
-  for (const authUser of authList.data?.users ?? []) {
-    if (!authUser.last_sign_in_at) pendingUserIds.add(authUser.id);
-  }
-
+  // "Pending" (invite not yet completed) is tracked on the profile itself and
+  // flips to 'active' on the user's first sign-in.
   return (
     <UsersPageClient
       currentUserEmail={user.email ?? ''}
       currentUserId={user.id}
       isSuperAdmin={isSuperAdmin(user.email)}
       initialAdmins={(admins ?? []) as Profile[]}
-      pendingUserIds={Array.from(pendingUserIds)}
     />
   );
 }
