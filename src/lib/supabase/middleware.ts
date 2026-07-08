@@ -36,7 +36,12 @@ export async function updateSession(request: NextRequest) {
   // authenticates via the x-telegram-bot-api-secret-token header in the route
   // itself, so it must bypass the login redirect (Telegram won't follow it).
   const publicRoutes = ['/login', '/auth/callback', '/auth/set-password', '/share', '/api/telegram'];
-  const isPublic = publicRoutes.some(r => pathname.startsWith(r));
+  // The report PDF endpoint backs the Download button on the public /share
+  // page, so anonymous visitors must reach it without a login redirect. The
+  // route handler itself only serves *published* reports to anonymous callers
+  // (drafts stay admin/owner-only), mirroring the share page's own access.
+  const isPublicReportPdf = /^\/api\/reports\/[^/]+\/pdf$/.test(pathname);
+  const isPublic = isPublicReportPdf || publicRoutes.some(r => pathname.startsWith(r));
 
   // Not logged in? Redirect to login (unless already on public route)
   if (!user && !isPublic) {
