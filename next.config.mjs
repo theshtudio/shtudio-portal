@@ -11,6 +11,16 @@ const nextConfig = {
     '@sparticuz/chromium',
     'puppeteer-core',
   ],
+
+  // @sparticuz/chromium loads its Chromium binary from bin/*.br via a path it
+  // computes at runtime, so Next's output file tracing (which only follows
+  // static require/import) never bundles it — the deployed Vercel function is
+  // missing the binary and executablePath() fails. Force the whole package
+  // (bin + build) into the PDF function. The `*` matches the [id] segment;
+  // a literal "[id]" would be parsed as a glob character class.
+  outputFileTracingIncludes: {
+    '/api/reports/*/pdf': ['./node_modules/@sparticuz/chromium/**'],
+  },
 };
 
 export default nextConfig;
