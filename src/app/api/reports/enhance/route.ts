@@ -1498,6 +1498,16 @@ Here is your design template:
     .roas-highlight { flex-direction: column; }
     .main { padding: 24px 20px 40px; }
   }
+
+  /* -- PDF / PRINT -- keep backgrounds and avoid slicing cards across pages.
+     Server-side PDF generation paginates the report to A4; browsers ignore
+     break-inside:avoid on boxes taller than a page, so this only prevents
+     awkward splits and never clips oversized sections. */
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .metric-card, .hero-summary, .hero-kpi, .chart-container, .chart-section,
+  .roas-highlight, .task-card, table, tr {
+    break-inside: avoid;
+  }
 </style>
 </head>
 <body>

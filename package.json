@@ -13,6 +13,7 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@sparticuz/chromium": "^149.0.0",
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.99.1",
     "@vercel/functions": "^3.4.3",
@@ -22,6 +23,7 @@
     "next": "^15.2.4",
     "openai": "^6.32.0",
     "pdf-parse": "^2.4.5",
+    "puppeteer-core": "^25.3.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "resend": "^6.9.3"
@@ -33,6 +35,7 @@
     "@types/react-dom": "^19.2.3",
     "eslint": "^9.39.4",
     "eslint-config-next": "^15.2.4",
+    "puppeteer": "^25.3.0",
     "typescript": "^5"
   }
 }
